@@ -218,7 +218,7 @@ void port_perf_menu_event(int opened) {
 }
 
 int port_perf_export_json(char* out, int maxBytes) {
-    if (!out || maxBytes <= 0) return 0;
+    if (!out || maxBytes <= 0) return -1;
     std::lock_guard<std::mutex> lock(sLock);
     int64_t now = port_host_time_ns();
     double secs = (now - sWindowStart) / 1e9;
@@ -226,7 +226,17 @@ int port_perf_export_json(char* out, int maxBytes) {
     double p50 = 0.0, p95 = 0.0, p99 = 0.0;
     computePercentiles(p50, p95, p99);
 
-    return snprintf(out, maxBytes,
+    char safeScene[64] = {0};
+    size_t d = 0;
+    for (size_t i = 0; sCurrentScene[i] && d < sizeof(safeScene) - 2; ++i) {
+        char c = sCurrentScene[i];
+        if (c == '"' || c == '\\') safeScene[d++] = '\\';
+        else if ((unsigned char)c < 0x20) c = ' ';
+        safeScene[d++] = c;
+    }
+    safeScene[d] = '\0';
+
+    int ret = snprintf(out, maxBytes,
         "{\"fps\":%.2f,\"p50_ms\":%.2f,\"p95_ms\":%.2f,\"p99_ms\":%.2f,"
         "\"work_avg_ms\":%.2f,\"work_max_ms\":%.2f,\"record_avg_ms\":%.2f,"
         "\"render_cpu_avg_ms\":%.2f,\"render_cpu_max_ms\":%.2f,\"upload_avg_ms\":%.2f,"
@@ -235,11 +245,17 @@ int port_perf_export_json(char* out, int maxBytes) {
         fps, p50, p95, p99, sWork.avg(), sWork.max, sRecord.avg(),
         sRenderCpu.avg(), sRenderCpu.max, sUpload.avg(), sGpuWait.avg(),
         sPresent.avg(), sPace.avg(), sShaderCompile.count, sPipelineCreate.count,
-        sCurrentScene, sMenuOpen ? "true" : "false");
+        safeScene, sMenuOpen ? "true" : "false");
+
+    if (ret < 0 || ret >= maxBytes) {
+        out[0] = '\0';
+        return -1;
+    }
+    return ret;
 }
 
 int port_perf_export_csv(char* out, int maxBytes) {
-    if (!out || maxBytes <= 0) return 0;
+    if (!out || maxBytes <= 0) return -1;
     std::lock_guard<std::mutex> lock(sLock);
     int64_t now = port_host_time_ns();
     double secs = (now - sWindowStart) / 1e9;
@@ -247,12 +263,18 @@ int port_perf_export_csv(char* out, int maxBytes) {
     double p50 = 0.0, p95 = 0.0, p99 = 0.0;
     computePercentiles(p50, p95, p99);
 
-    return snprintf(out, maxBytes,
+    int ret = snprintf(out, maxBytes,
         "metric,value\nfps,%.2f\np50_ms,%.2f\np95_ms,%.2f\np99_ms,%.2f\n"
         "work_avg_ms,%.2f\nrender_cpu_avg_ms,%.2f\nupload_avg_ms,%.2f\n"
         "present_avg_ms,%.2f\npace_avg_ms,%.2f\npipeline_creates,%u\n",
         fps, p50, p95, p99, sWork.avg(), sRenderCpu.avg(), sUpload.avg(),
         sPresent.avg(), sPace.avg(), sPipelineCreate.count);
+
+    if (ret < 0 || ret >= maxBytes) {
+        out[0] = '\0';
+        return -1;
+    }
+    return ret;
 }
 
 }  // extern "C"

@@ -69,9 +69,7 @@ void VkRenderer::uploadTextures(VkCommandBuffer cmd, const std::vector<std::shar
         if (img->vkView != 0 || img->vkImage != 0 || img->vkMemory != 0) {
             if (sameDevice) {
                 if (img->vkView) invalidateSamplerDescSetsForView((VkImageView)img->vkView);
-                if (img->vkView) vkDestroyImageView(mDevice, (VkImageView)img->vkView, nullptr);
-                if (img->vkImage) vkDestroyImage(mDevice, (VkImage)img->vkImage, nullptr);
-                if (img->vkMemory) vkFreeMemory(mDevice, (VkDeviceMemory)img->vkMemory, nullptr);
+                queueVkTextureDelete(img->vkImage, img->vkMemory, img->vkView);
             }
             img->vkView = img->vkImage = img->vkMemory = 0;
         }
@@ -142,6 +140,14 @@ void VkRenderer::uploadTextures(VkCommandBuffer cmd, const std::vector<std::shar
         }
 
         VkDeviceSize alignedOffset = (totalStagingBytes + 63) & ~63ULL;
+        if (alignedOffset + requiredBytes > 128ULL * 1024 * 1024) {
+            LOGE("uploadTextures: batch size limit exceeded (%llu bytes)", (unsigned long long)(alignedOffset + requiredBytes));
+            vkDestroyImageView(mDevice, vt.view, nullptr);
+            vkDestroyImage(mDevice, vt.image, nullptr);
+            vkFreeMemory(mDevice, vt.memory, nullptr);
+            sUploadFailed++;
+            continue;
+        }
         totalStagingBytes = alignedOffset + requiredBytes;
         toUpload.push_back({img, vt, alignedOffset, requiredBytes, levels});
     }
@@ -202,8 +208,14 @@ void VkRenderer::uploadTextures(VkCommandBuffer cmd, const std::vector<std::shar
         std::vector<VkBufferImageCopy> regions(item.vt.levels);
         VkDeviceSize offset = item.stagingOffset;
         uint32_t w = item.vt.width, h = item.vt.height;
+        bool regionOk = true;
         for (uint32_t l = 0; l < item.vt.levels; l++) {
             VkDeviceSize levelBytes = (VkDeviceSize)w * h * 4;
+            if (offset + levelBytes > item.stagingOffset + item.requiredBytes ||
+                offset + levelBytes > totalStagingBytes) {
+                regionOk = false;
+                break;
+            }
             regions[l].bufferOffset = offset;
             regions[l].imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             regions[l].imageSubresource.mipLevel = l;
@@ -212,6 +224,10 @@ void VkRenderer::uploadTextures(VkCommandBuffer cmd, const std::vector<std::shar
             offset += levelBytes;
             w = w > 1 ? w / 2 : 1;
             h = h > 1 ? h / 2 : 1;
+        }
+        if (!regionOk) {
+            LOGE("uploadTextures: copy region bounds check failed for %ux%u", item.vt.width, item.vt.height);
+            continue;
         }
 
         vkCmdCopyBufferToImage(cmd, stagingBuf, item.vt.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,

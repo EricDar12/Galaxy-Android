@@ -36,6 +36,8 @@ const char* vkDebugValue(const char* envName, const char* propertyName);
 
 extern uint64_t sVkDeviceGeneration;
 
+void queueVkTextureDelete(uint64_t image, uint64_t memory, uint64_t view);
+
 PipelineKey pipelineKeyFor(const Item& it, const ShaderUid& uid);
 
 }  // namespace gpu

@@ -100,24 +100,26 @@ void NetplayManager::workerLoop() {
 
 void NetplayManager::handleIncomingPacket(const uint8_t* data, size_t size,
                                          const std::string& srcIp, int srcPort) {
-    if (size < sizeof(PacketHeader)) return;
-    const PacketHeader* hdr = (const PacketHeader*)data;
-    if (hdr->magic != kNetMagic || hdr->version != kNetVersion) return;
+    if (!data || size < sizeof(PacketHeader)) return;
+    PacketHeader hdr;
+    std::memcpy(&hdr, data, sizeof(PacketHeader));
+    if (hdr.magic != kNetMagic || hdr.version != kNetVersion) return;
 
     const uint8_t* payload = data + sizeof(PacketHeader);
     size_t payloadSize = size - sizeof(PacketHeader);
 
-    if (hdr->type == PKT_BEACON_BROADCAST && payloadSize >= sizeof(BeaconPayload)) {
-        const BeaconPayload* b = (const BeaconPayload*)payload;
+    if (hdr.type == PKT_BEACON_BROADCAST && payloadSize >= sizeof(BeaconPayload)) {
+        BeaconPayload b;
+        std::memcpy(&b, payload, sizeof(BeaconPayload));
         PortLanHostInfo hostInfo;
         std::memset(&hostInfo, 0, sizeof(hostInfo));
-        std::strncpy(hostInfo.name, b->roomName, sizeof(hostInfo.name) - 1);
+        std::strncpy(hostInfo.name, b.roomName, sizeof(hostInfo.name) - 1);
         std::strncpy(hostInfo.ip, srcIp.c_str(), sizeof(hostInfo.ip) - 1);
-        hostInfo.port = b->port;
-        hostInfo.mode = b->mode;
-        std::strncpy(hostInfo.stage, b->stage, sizeof(hostInfo.stage) - 1);
-        hostInfo.scenario = b->scenario;
-        hostInfo.playerCount = b->playerCount;
+        hostInfo.port = b.port;
+        hostInfo.mode = b.mode;
+        std::strncpy(hostInfo.stage, b.stage, sizeof(hostInfo.stage) - 1);
+        hostInfo.scenario = b.scenario;
+        hostInfo.playerCount = b.playerCount;
         hostInfo.lastSeenMs = getNowMs();
 
         std::lock_guard<std::mutex> lk(mMutex);
@@ -136,7 +138,7 @@ void NetplayManager::handleIncomingPacket(const uint8_t* data, size_t size,
         return;
     }
 
-    if (hdr->type == PKT_CONNECT_REQ && mRole.load() == PORT_NET_ROLE_HOST) {
+    if (hdr.type == PKT_CONNECT_REQ && mRole.load() == PORT_NET_ROLE_HOST) {
         mPeerIp = srcIp;
         mPeerPort = srcPort;
         mConnected.store(true);
@@ -152,11 +154,12 @@ void NetplayManager::handleIncomingPacket(const uint8_t* data, size_t size,
         return;
     }
 
-    if (hdr->type == PKT_CONNECT_ACK && mRole.load() == PORT_NET_ROLE_CLIENT) {
-        const ConnectAckPayload* ack = (const ConnectAckPayload*)payload;
-        if (ack->accepted) {
+    if (hdr.type == PKT_CONNECT_ACK && mRole.load() == PORT_NET_ROLE_CLIENT && payloadSize >= sizeof(ConnectAckPayload)) {
+        ConnectAckPayload ack;
+        std::memcpy(&ack, payload, sizeof(ConnectAckPayload));
+        if (ack.accepted) {
             mConnected.store(true);
-            mMode.store(ack->mode);
+            mMode.store(ack.mode);
             mLastPacketReceived = std::chrono::steady_clock::now();
             PORT_LOG("NetplayManager: connected to host %s:%d\n", srcIp.c_str(), srcPort);
         }
@@ -166,36 +169,41 @@ void NetplayManager::handleIncomingPacket(const uint8_t* data, size_t size,
     if (!mConnected.load() || srcIp != mPeerIp || srcPort != mPeerPort) return;
     mLastPacketReceived = std::chrono::steady_clock::now();
 
-    if (hdr->type == PKT_PING && payloadSize >= sizeof(PingPongPayload)) {
-        const PingPongPayload* p = (const PingPongPayload*)payload;
-        PingPongPayload pong = *p;
-        sendPacket(PKT_PONG, &pong, sizeof(pong), srcIp, srcPort);
-    } else if (hdr->type == PKT_PONG && payloadSize >= sizeof(PingPongPayload)) {
-        const PingPongPayload* p = (const PingPongPayload*)payload;
-        int64_t rtt = getNowMs() - p->timestampMs;
+    if (hdr.type == PKT_PING && payloadSize >= sizeof(PingPongPayload)) {
+        PingPongPayload p;
+        std::memcpy(&p, payload, sizeof(PingPongPayload));
+        sendPacket(PKT_PONG, &p, sizeof(p), srcIp, srcPort);
+    } else if (hdr.type == PKT_PONG && payloadSize >= sizeof(PingPongPayload)) {
+        PingPongPayload p;
+        std::memcpy(&p, payload, sizeof(PingPongPayload));
+        int64_t rtt = getNowMs() - p.timestampMs;
         mPingMs.store((int)std::max((int64_t)0, rtt));
-    } else if (hdr->type == PKT_COSTAR_STATE && payloadSize >= sizeof(PortPadState)) {
-        const PortPadState* pad = (const PortPadState*)payload;
-        PortPadState costarPad = *pad;
-        costarPad.connected = 1;
-        port_input_set(1, &costarPad);
-    } else if (hdr->type == PKT_PLAYER_STATE && payloadSize >= sizeof(PortRemotePlayerState)) {
-        const PortRemotePlayerState* pState = (const PortRemotePlayerState*)payload;
+    } else if (hdr.type == PKT_COSTAR_STATE && payloadSize >= sizeof(PortPadState)) {
+        PortPadState pad;
+        std::memcpy(&pad, payload, sizeof(PortPadState));
+        pad.connected = 1;
+        port_input_set(1, &pad);
+    } else if (hdr.type == PKT_PLAYER_STATE && payloadSize >= sizeof(PortRemotePlayerState)) {
+        PortRemotePlayerState pState;
+        std::memcpy(&pState, payload, sizeof(PortRemotePlayerState));
         std::lock_guard<std::mutex> lk(mMutex);
-        mLatestRemotePlayer = *pState;
+        mLatestRemotePlayer = pState;
         mLatestRemotePlayer.valid = 1;
         mHasRemotePlayer = true;
-    } else if (hdr->type == PKT_EVENT && payloadSize >= sizeof(EventPayload)) {
-        const EventPayload* ev = (const EventPayload*)payload;
+    } else if (hdr.type == PKT_EVENT && payloadSize >= sizeof(EventPayload)) {
+        EventPayload ev;
+        std::memcpy(&ev, payload, sizeof(EventPayload));
+        char safeStage[sizeof(ev.stage) + 1] = {0};
+        std::memcpy(safeStage, ev.stage, sizeof(ev.stage));
         std::lock_guard<std::mutex> lk(mMutex);
-        if (ev->eventType == 1) {
+        if (ev.eventType == 1) {
             mPendingWarp = true;
-            mPendingWarpStage = ev->stage;
-            mPendingWarpScenario = ev->scenario;
-        } else if (ev->eventType == 2) {
+            mPendingWarpStage = safeStage;
+            mPendingWarpScenario = ev.scenario;
+        } else if (ev.eventType == 2) {
             mPendingSpin = true;
         }
-    } else if (hdr->type == PKT_DISCONNECT) {
+    } else if (hdr.type == PKT_DISCONNECT) {
         PORT_LOG("NetplayManager: disconnect from peer %s:%d\n", srcIp.c_str(), srcPort);
         disconnect(false);
     }

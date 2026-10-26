@@ -85,12 +85,29 @@ static void testProductionMalformedPacketRejection() {
     };
     for (uint8_t t : types) {
         uint8_t truncBuf[sizeof(PacketHeader) + 2]{};
-        PacketHeader* h = (PacketHeader*)truncBuf;
-        h->magic = kNetMagic;
-        h->version = kNetVersion;
-        h->type = t;
+        PacketHeader h{};
+        h.magic = kNetMagic;
+        h.version = kNetVersion;
+        h.type = t;
+        std::memcpy(truncBuf, &h, sizeof(h));
         mgr.handleIncomingPacket(truncBuf, sizeof(truncBuf), dummyIp, dummyPort);
     }
+
+    // 6. Alignment-safety: parse from deliberately odd/unaligned buffer addresses
+    alignas(16) uint8_t rawAligned[128]{};
+    uint8_t* unalignedPtr = rawAligned + 1; // +1 byte offset guarantees unaligned
+    PacketHeader unalignedHdr{};
+    unalignedHdr.magic = kNetMagic;
+    unalignedHdr.version = kNetVersion;
+    unalignedHdr.type = PKT_BEACON_BROADCAST;
+    std::memcpy(unalignedPtr, &unalignedHdr, sizeof(PacketHeader));
+    mgr.handleIncomingPacket(unalignedPtr, sizeof(PacketHeader), dummyIp, dummyPort);
+
+    // 7. Excessive payload handling
+    std::vector<uint8_t> hugeBuf(4096, 0x55);
+    std::memcpy(hugeBuf.data(), &unalignedHdr, sizeof(PacketHeader));
+    mgr.handleIncomingPacket(hugeBuf.data(), hugeBuf.size(), dummyIp, dummyPort);
+
     printf("[PASS] Production handleIncomingPacket safely rejected all malformed inputs\n");
 }
 

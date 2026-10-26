@@ -109,11 +109,12 @@ bool VkRenderer::uploadDynamicBuffer(VkBuffer& buf, VkDeviceMemory& mem, void*& 
             return false;
         }
 
-        if (mem != VK_NULL_HANDLE) {
-            if (mappedPtr != nullptr) vkUnmapMemory(mDevice, mem);
+        if (buf != VK_NULL_HANDLE || mem != VK_NULL_HANDLE) {
+            if (mappedPtr != nullptr && mem != VK_NULL_HANDLE) {
+                vkUnmapMemory(mDevice, mem);
+            }
+            mStagingBuffersToFree.push_back({buf, mem});
         }
-        if (buf != VK_NULL_HANDLE) vkDestroyBuffer(mDevice, buf, nullptr);
-        if (mem != VK_NULL_HANDLE) vkFreeMemory(mDevice, mem, nullptr);
 
         buf = newBuf;
         mem = newMem;
