@@ -140,9 +140,13 @@ add_test(NAME wstring_format COMMAND wstring_format_test)
 
 # Run under CTest without depending on which libstdc++ happens to be first on
 # PATH; an older MSYS2 runtime can lack symbols the compiler emits.
+get_property(_all_test_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
 if(WIN32)
-  get_property(_test_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
-  foreach(_target IN LISTS _test_targets)
+  foreach(_target IN LISTS _all_test_targets)
     target_link_options(${_target} PRIVATE -static)
   endforeach()
 endif()
+
+# Umbrella target guaranteeing all registered host test executables are built
+add_custom_target(host_tests DEPENDS ${_all_test_targets})
+

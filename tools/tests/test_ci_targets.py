@@ -4,7 +4,8 @@ import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CMAKELISTS = os.path.join(ROOT, "tests", "CMakeLists.txt")
-WORKFLOW = os.path.join(ROOT, ".github", "workflows", "host-tests.yml")
+HOST_WORKFLOW = os.path.join(ROOT, ".github", "workflows", "host-tests.yml")
+RELEASE_WORKFLOW = os.path.join(ROOT, ".github", "workflows", "release.yml")
 
 
 def registered_test_targets(text):
@@ -27,21 +28,34 @@ class CiTargetCoverageTest(unittest.TestCase):
     def setUp(self):
         with open(CMAKELISTS, encoding="utf-8") as handle:
             self.cmake = handle.read()
-        with open(WORKFLOW, encoding="utf-8") as handle:
-            self.workflow = handle.read()
+        with open(HOST_WORKFLOW, encoding="utf-8") as handle:
+            self.host_workflow = handle.read()
+        with open(RELEASE_WORKFLOW, encoding="utf-8") as handle:
+            self.release_workflow = handle.read()
 
-    def test_every_registered_test_is_built_before_ctest(self):
-        # CTest discovers tests but does not build their executables. The prior
-        # CI failure was a registered settings persistence test that was never
-        # in the explicit target list, so keep both directions of this set
-        # comparison exact.
+    def test_umbrella_host_tests_target_defined(self):
+        self.assertIn("add_custom_target(host_tests", self.cmake,
+                      "tests/CMakeLists.txt must define host_tests umbrella target")
+
+    def test_host_workflow_builds_all_registered_tests(self):
         registered = registered_test_targets(self.cmake)
-        built = built_test_targets(self.workflow)
+        built = built_test_targets(self.host_workflow)
         self.assertTrue(registered)
-        self.assertEqual(registered - built, set(), "CI does not build these test targets")
-        self.assertEqual(built - registered, set(), "CI builds targets no test registers")
-        self.assertIn("ctest --test-dir build-host --output-on-failure", self.workflow)
+        self.assertEqual(registered - built, set(), "host-tests.yml does not build these test targets")
+        self.assertEqual(built - registered, set(), "host-tests.yml builds targets no test registers")
+        self.assertIn("host_tests", self.host_workflow, "host-tests.yml must invoke host_tests umbrella target")
+        self.assertIn("ctest --test-dir build-host --output-on-failure", self.host_workflow)
+
+    def test_release_workflow_builds_all_registered_tests(self):
+        registered = registered_test_targets(self.cmake)
+        built = built_test_targets(self.release_workflow)
+        self.assertTrue(registered)
+        self.assertEqual(registered - built, set(), "release.yml does not build these test targets")
+        self.assertEqual(built - registered, set(), "release.yml builds targets no test registers")
+        self.assertIn("host_tests", self.release_workflow, "release.yml must invoke host_tests umbrella target")
+        self.assertIn("ctest --test-dir build-host --output-on-failure", self.release_workflow)
 
 
 if __name__ == "__main__":
     unittest.main()
+

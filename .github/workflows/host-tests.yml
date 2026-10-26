@@ -51,7 +51,8 @@ jobs:
         run: |
           cmake -S . -B build-host -G Ninja -DCMAKE_BUILD_TYPE=Debug
           cmake --build build-host --parallel \
-            --target dvd_fst_test extraction_security_test wii_extraction_limits_test \
+            --target host_tests \
+                     dvd_fst_test extraction_security_test wii_extraction_limits_test \
                      guest_memory_test guest_reserve_linux_test timing_pacing_test \
                      settings_persistence_test thp_bounds_test heap_alignment_test \
                      save_sync_test dolphin_converter_test wstring_format_test
