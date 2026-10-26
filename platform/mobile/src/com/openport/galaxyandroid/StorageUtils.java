@@ -12,6 +12,8 @@ import android.provider.OpenableColumns;
 import android.provider.Settings;
 
 import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
 
 public final class StorageUtils {
     private StorageUtils() {}
@@ -40,8 +42,10 @@ public final class StorageUtils {
     }
 
     public static void deleteRecursive(File fileOrDirectory) {
-        if (fileOrDirectory == null || !fileOrDirectory.exists()) return;
-        if (fileOrDirectory.isDirectory()) {
+        if (fileOrDirectory == null) return;
+        java.nio.file.Path path = fileOrDirectory.toPath();
+        if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return;
+        if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
             File[] children = fileOrDirectory.listFiles();
             if (children != null) {
                 for (File child : children) {

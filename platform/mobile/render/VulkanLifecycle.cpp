@@ -43,6 +43,7 @@ bool VulkanLifecycle::bringUp(ANativeWindow* window, int& screenW, int& screenH,
     gpu::VkTarget newTarget = gpu::VkRenderer::get().createTarget(targetW, targetH);
     if (newTarget.framebuffer == VK_NULL_HANDLE) {
         LOGE("Failed to allocate initial Vulkan render target (%dx%d)", targetW, targetH);
+        gpu::VkRenderer::get().shutdown();
         return false;
     }
     if (target.framebuffer) {

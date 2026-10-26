@@ -14,6 +14,9 @@
 #ifndef O_DIRECTORY
 #define O_DIRECTORY 0
 #endif
+#ifndef O_NOFOLLOW
+#define O_NOFOLLOW 0
+#endif
 
 #ifdef _WIN32
 // Host-test portability; Android uses the POSIX calls directly.
@@ -66,14 +69,16 @@ bool removeDirRecursive(const std::string& path) {
 
 bool copyFileVerified(const std::string& src, const std::string& dst) {
     struct stat st;
-    if (stat(src.c_str(), &st) != 0 || st.st_size <= 0) return false;
+    if (lstat(src.c_str(), &st) != 0 || !S_ISREG(st.st_mode) || st.st_size <= 0) return false;
 
     FILE* in = fopen(src.c_str(), "rb");
     if (!in) return false;
 
     std::string tmpDst = dst + ".tmp";
-    FILE* out = fopen(tmpDst.c_str(), "wb");
+    int outFd = open(tmpDst.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW, 0660);
+    FILE* out = outFd >= 0 ? fdopen(outFd, "wb") : nullptr;
     if (!out) {
+        if (outFd >= 0) close(outFd);
         fclose(in);
         return false;
     }
@@ -108,7 +113,19 @@ bool copyFileVerified(const std::string& src, const std::string& dst) {
 }
 
 bool copyDirVerified(const std::string& src, const std::string& dst) {
+    static thread_local unsigned depth = 0;
+    if (depth >= 64) return false;
+    struct DepthGuard {
+        unsigned& depth;
+        explicit DepthGuard(unsigned& value) : depth(value) { ++depth; }
+        ~DepthGuard() { --depth; }
+    } guard(depth);
+
+    struct stat srcStat;
+    if (lstat(src.c_str(), &srcStat) != 0 || !S_ISDIR(srcStat.st_mode)) return false;
     if (mkdir(dst.c_str(), 0770) != 0 && errno != EEXIST) return false;
+    struct stat dstStat;
+    if (lstat(dst.c_str(), &dstStat) != 0 || !S_ISDIR(dstStat.st_mode)) return false;
     DIR* dir = opendir(src.c_str());
     if (!dir) return false;
     struct dirent* entry;
@@ -120,7 +137,10 @@ bool copyDirVerified(const std::string& src, const std::string& dst) {
         std::string sPath = src + "/" + entry->d_name;
         std::string dPath = dst + "/" + entry->d_name;
         struct stat st;
-        if (stat(sPath.c_str(), &st) != 0) continue;
+        if (lstat(sPath.c_str(), &st) != 0) {
+            success = false;
+            break;
+        }
         bool copied;
         if (S_ISDIR(st.st_mode)) {
             copied = copyDirVerified(sPath, dPath);
@@ -139,7 +159,7 @@ bool copyDirVerified(const std::string& src, const std::string& dst) {
 bool writeFileAtomic(const std::string& path, const void* data, size_t size) {
     if (path.empty() || !data || size == 0) return false;
     std::string tmpDst = path + ".tmp";
-    int fd = open(tmpDst.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0660);
+    int fd = open(tmpDst.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW, 0660);
     if (fd < 0) return false;
 
     const char* bytes = static_cast<const char*>(data);
@@ -174,11 +194,19 @@ bool writeFileAtomic(const std::string& path, const void* data, size_t size) {
 }
 
 bool validateSaveDir(const std::string& dir) {
+    static thread_local unsigned depth = 0;
+    if (depth >= 64) return false;
+    struct DepthGuard {
+        unsigned& depth;
+        explicit DepthGuard(unsigned& value) : depth(value) { ++depth; }
+        ~DepthGuard() { --depth; }
+    } guard(depth);
+
     struct stat st;
-    if (stat(dir.c_str(), &st) != 0 || !S_ISDIR(st.st_mode)) return false;
+    if (lstat(dir.c_str(), &st) != 0 || !S_ISDIR(st.st_mode)) return false;
 
     std::string directGameData = dir + "/GameData.bin";
-    if (stat(directGameData.c_str(), &st) == 0 && st.st_size >= 512) return true;
+    if (lstat(directGameData.c_str(), &st) == 0 && S_ISREG(st.st_mode) && st.st_size >= 512) return true;
 
     DIR* d = opendir(dir.c_str());
     if (!d) return false;
@@ -187,13 +215,13 @@ bool validateSaveDir(const std::string& dir) {
     while ((entry = readdir(d)) != nullptr) {
         if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, "..")) continue;
         std::string sub = dir + "/" + entry->d_name;
-        if (stat(sub.c_str(), &st) == 0) {
+        if (lstat(sub.c_str(), &st) == 0) {
             if (S_ISDIR(st.st_mode)) {
                 if (validateSaveDir(sub)) {
                     found = true;
                     break;
                 }
-            } else if (strstr(entry->d_name, "GameData.bin") && st.st_size >= 512) {
+            } else if (S_ISREG(st.st_mode) && strstr(entry->d_name, "GameData.bin") && st.st_size >= 512) {
                 found = true;
                 break;
             }

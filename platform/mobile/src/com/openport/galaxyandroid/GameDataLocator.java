@@ -7,6 +7,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public final class GameDataLocator {
     private GameDataLocator() {}
@@ -63,7 +64,10 @@ public final class GameDataLocator {
         candidates.add(new File("/sdcard/GalaxyData"));
         candidates.add(new File(Environment.getExternalStorageDirectory(), "GalaxyData"));
         if (context != null) {
-            candidates.add(new File(context.getExternalFilesDir(null), "GalaxyData"));
+            File externalFilesDir = context.getExternalFilesDir(null);
+            if (externalFilesDir != null) {
+                candidates.add(new File(externalFilesDir, "GalaxyData"));
+            }
             candidates.add(new File(context.getFilesDir(), "GalaxyData"));
         }
         File storageDir = new File("/storage");
@@ -110,7 +114,7 @@ public final class GameDataLocator {
             File[] gFiles = galaxyDataDir.listFiles();
             if (gFiles != null) {
                 for (File f : gFiles) {
-                    String name = f.getName().toLowerCase();
+                    String name = f.getName().toLowerCase(Locale.ROOT);
                     if (name.endsWith(".rvz") || name.endsWith(".wbfs") || name.endsWith(".iso")) {
                         return f;
                     }
@@ -122,7 +126,7 @@ public final class GameDataLocator {
             File[] files = downloadDir.listFiles();
             if (files != null) {
                 for (File f : files) {
-                    String name = f.getName().toLowerCase();
+                    String name = f.getName().toLowerCase(Locale.ROOT);
                     if (name.endsWith(".rvz") || name.endsWith(".wbfs") || name.endsWith(".iso")) {
                         return f;
                     }

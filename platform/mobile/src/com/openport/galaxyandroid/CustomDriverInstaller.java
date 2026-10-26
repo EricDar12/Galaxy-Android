@@ -80,6 +80,9 @@ public final class CustomDriverInstaller {
                 File driverDir = new File(context.getFilesDir(), "custom_driver");
                 StorageUtils.deleteRecursive(driverDir);
                 driverDir.mkdirs();
+                File driverRoot = driverDir.getCanonicalFile();
+                String driverRootPath = driverRoot.getPath();
+                String driverRootPrefix = driverRootPath + File.separator;
 
                 String driverName = "Custom Vulkan Driver";
                 String driverDesc = "";
@@ -94,9 +97,11 @@ public final class CustomDriverInstaller {
                     byte[] buffer = new byte[64 * 1024];
                     while ((entry = zis.getNextEntry()) != null) {
                         String name = entry.getName();
-                        if (name.contains("..")) continue;
-
-                        File outFile = new File(driverDir, name);
+                        File outFile = new File(driverRoot, name).getCanonicalFile();
+                        String outPath = outFile.getPath();
+                        if (!outPath.startsWith(driverRootPrefix) && !outPath.equals(driverRootPath)) {
+                            throw new java.io.IOException("Driver ZIP entry escapes install directory: " + name);
+                        }
                         if (entry.isDirectory()) {
                             outFile.mkdirs();
                         } else {

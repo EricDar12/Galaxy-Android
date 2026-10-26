@@ -117,7 +117,7 @@ void VkRenderer::present(const VkTarget& target, int vpX, int vpY, int vpW, int 
         vkCmdDraw(mPresentCommandBuffer, 3, 1, 0, 0);
     }
 
-    renderUiOverlay(mWidth, mHeight, mPresentCommandBuffer);
+    renderUiOverlay(extW, extH, mPresentCommandBuffer);
 
     vkCmdEndRenderPass(mPresentCommandBuffer);
 

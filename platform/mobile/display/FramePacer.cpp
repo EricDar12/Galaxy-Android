@@ -59,9 +59,10 @@ void FramePacer::sync(android_app* app, int targetFps, float gameSpeed) {
             port_perf_pace(sleepRecordedNs);
         }
     }
-    // Anchor on-time frames to the exact deadline and missed ones to now,
-    // so VSync phase cannot drift or accumulate negative debt.
-    mLastPresentNs = pacing::settlePhase(nowNs, lastNs, framePeriodNs);
+    // Judge the deadline against the actual wake time. Using the timestamp
+    // captured before nanosleep treats a late wake as on-time and leaves the
+    // pacer anchored to a deadline the frame already missed.
+    mLastPresentNs = pacing::settlePhase(port_host_time_ns(), lastNs, framePeriodNs);
 }
 
 bool FramePacer::shouldPresentSlot(int targetFps, float gameSpeed, int64_t nowNs) const {

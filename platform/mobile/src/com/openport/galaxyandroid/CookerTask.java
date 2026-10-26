@@ -9,6 +9,7 @@ import android.util.Log;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.util.Locale;
 
 public final class CookerTask {
     private static final String TAG = "CookerTask";
@@ -40,7 +41,7 @@ public final class CookerTask {
                 if (listener != null) listener.onLog("[Storage] Target installation directory: " + outputDir.getAbsolutePath());
 
                 String testName = !selectedDisplayName.isEmpty() ? selectedDisplayName : selectedPath;
-                String lowerName = testName.toLowerCase();
+                String lowerName = testName.toLowerCase(Locale.ROOT);
                 boolean isDiscImage = lowerName.endsWith(".rvz") || lowerName.endsWith(".wbfs")
                         || lowerName.endsWith(".iso") || lowerName.endsWith(".gcm");
 
@@ -154,22 +155,22 @@ public final class CookerTask {
                             if (listener != null) listener.onProgress(percent, message);
                         }
                         @Override public void onFinished(boolean success, String message) {
-                            if (finalTempExtraction != null && finalTempExtraction.exists()) {
-                                if (listener != null) listener.onLog("[Clean] Freeing temporary extraction cache...");
-                                CookerEngine.deleteRecursive(finalTempExtraction);
-                            }
-                            handler.post(() -> {
-                                if (listener != null) listener.onCompleted(success, message);
-                            });
+                            // The native bridge currently returns a status code and does not
+                            // invoke onFinished. Completion is handled after runCooker returns.
                         }
                     }
                 );
 
-                if (ret != 0) {
-                    handler.post(() -> {
-                        if (listener != null) listener.onCompleted(false, "Converter returned code: " + ret);
-                    });
+                if (finalTempExtraction != null && finalTempExtraction.exists()) {
+                    if (listener != null) listener.onLog("[Clean] Freeing temporary extraction cache...");
+                    CookerEngine.deleteRecursive(finalTempExtraction);
                 }
+                final boolean success = ret == 0;
+                final String message = success ? "Game assets converted successfully."
+                                               : "Converter returned code: " + ret;
+                handler.post(() -> {
+                    if (listener != null) listener.onCompleted(success, message);
+                });
 
             } catch (Exception e) {
                 Log.e(TAG, "Cooking failed with exception", e);

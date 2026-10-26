@@ -215,6 +215,7 @@ void VkRenderer::onWindowResized(ANativeWindow* window) {
         const VkFormat oldFormat = mSwapchainFormat;
         if (!createSwapchain()) {
             LOGE("Failed to recreate swapchain during window resize");
+            markFatal("resize", "createSwapchain", VK_ERROR_INITIALIZATION_FAILED);
             return;
         }
 
@@ -231,10 +232,12 @@ void VkRenderer::onWindowResized(ANativeWindow* window) {
             resetPipelineCaches();
             if (!createRenderPasses() || !createPresentationPipeline() || !createUiPipeline()) {
                 LOGE("Failed to rebuild the swapchain-format dependent state");
+                markFatal("resize", "rebuild swapchain-format dependent state", VK_ERROR_INITIALIZATION_FAILED);
                 return;
             }
         } else if (!createSwapchainFramebuffers()) {
             LOGE("Failed to recreate swapchain framebuffers");
+            markFatal("resize", "createSwapchainFramebuffers", VK_ERROR_INITIALIZATION_FAILED);
             return;
         }
     }

@@ -21,7 +21,8 @@ void VkRenderer::executeCopyItem(VkCommandBuffer cmd, const Item& it, const Prep
     if (sy0 < 0) sy0 = 0;
     if (sx1 > target.width) sx1 = target.width;
     if (sy1 > target.height) sy1 = target.height;
-    int dw = sx1 - sx0, dh = sy1 - sy0;
+    const int clearWidth = sx1 - sx0, clearHeight = sy1 - sy0;
+    int dw = clearWidth, dh = clearHeight;
 
     if (toXfb) {
         if (dw > 0 && dh > 0) {
@@ -157,7 +158,7 @@ void VkRenderer::executeCopyItem(VkCommandBuffer cmd, const Item& it, const Prep
         }
     }
 
-    if (clear && !toXfb) {
+    if (clear) {
         if (!inRenderPass) {
             VkRenderPassBeginInfo resumeRpInfo = rpInfo;
             resumeRpInfo.renderPass = mEfbLoadRenderPass;
@@ -189,10 +190,10 @@ void VkRenderer::executeCopyItem(VkCommandBuffer cmd, const Item& it, const Prep
             clearAtts[clearAttCount].clearValue.depthStencil = {(cp[8] & 0xFFFFFF) / 16777215.0f, 0};
             clearAttCount++;
         }
-        if (clearAttCount > 0 && dw > 0 && dh > 0) {
+        if (clearAttCount > 0 && clearWidth > 0 && clearHeight > 0) {
             VkClearRect clearRect{};
             clearRect.rect.offset = {sx0, sy0};
-            clearRect.rect.extent = {(uint32_t)dw, (uint32_t)dh};
+            clearRect.rect.extent = {(uint32_t)clearWidth, (uint32_t)clearHeight};
             clearRect.baseArrayLayer = 0;
             clearRect.layerCount = 1;
             vkCmdClearAttachments(cmd, clearAttCount, clearAtts, 1, &clearRect);
