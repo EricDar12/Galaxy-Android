@@ -5,9 +5,20 @@
 #include <math.h>
 
 #include "../ui/UIOverlay.h"
-#include "port/port.h"
 
 namespace mobile_input {
+
+GamepadInput::GamepadInput() {
+    mMapping = controller_mapping_get_default(CONTROLLER_PROFILE_STANDARD);
+}
+
+void GamepadInput::setProfile(ControllerProfile profile) {
+    mMapping = controller_mapping_get_default(profile);
+}
+
+void GamepadInput::setMapping(const ControllerMapping& mapping) {
+    mMapping = mapping;
+}
 
 bool GamepadInput::handleMotionEvent(AInputEvent* event, PortPadState& pad, int& spinFrames, bool touchscreenDown) {
     int32_t source = AInputEvent_getSource(event);
@@ -21,19 +32,19 @@ bool GamepadInput::handleMotionEvent(AInputEvent* event, PortPadState& pad, int&
         mobile_ui::UIOverlay::get().showToast("Gamepad Connected");
     }
 
-    // Left Analog Stick
+    // Left Analog Stick with calibrated deadzone
     float rawX = AMotionEvent_getAxisValue(event, AMOTION_EVENT_AXIS_X, 0);
     float rawY = AMotionEvent_getAxisValue(event, AMOTION_EVENT_AXIS_Y, 0);
-    float stickMag = sqrtf(rawX * rawX + rawY * rawY);
-    const float kDeadzone = 0.18f;
-    if (stickMag <= kDeadzone) {
+    float deadzone = std::max(0.05f, std::min(0.40f, mMapping.deadzone));
+    float normX = 0.0f, normY = 0.0f;
+    float normMag = controller_mapping_apply_deadzone(rawX, rawY, deadzone, &normX, &normY);
+    if (normMag <= 0.0001f) {
         mPhysicalStickX = 0.0f;
         mPhysicalStickY = 0.0f;
     } else {
-        float norm = (stickMag - kDeadzone) / (1.0f - kDeadzone);
         float sens = mobile_ui::UIOverlay::get().settings().stickSensitivity;
-        mPhysicalStickX = (rawX / stickMag) * std::min(1.0f, norm * sens);
-        mPhysicalStickY = -(rawY / stickMag) * std::min(1.0f, norm * sens); // Invert Y for Wii convention
+        mPhysicalStickX = std::max(-1.0f, std::min(1.0f, normX * sens));
+        mPhysicalStickY = std::max(-1.0f, std::min(1.0f, -normY * sens)); // Invert Y for Wii convention
     }
 
     // D-Pad Hat axes
@@ -47,7 +58,7 @@ bool GamepadInput::handleMotionEvent(AInputEvent* event, PortPadState& pad, int&
     else if (hatY > 0.5f) { mPhysicalAxisButtons |= 0x0004; mPhysicalAxisButtons &= ~0x0008; }
     else { mPhysicalAxisButtons &= ~0x000C; }
 
-    // Analog Triggers (L2 / R2)
+    // Analog Triggers (L2 / R2) with configurable threshold
     float rawL = std::max(0.0f, AMotionEvent_getAxisValue(event, AMOTION_EVENT_AXIS_LTRIGGER, 0));
     float rawBrake = std::max(0.0f, AMotionEvent_getAxisValue(event, AMOTION_EVENT_AXIS_BRAKE, 0));
     float lTrig = std::max(rawL, rawBrake);
@@ -55,11 +66,24 @@ bool GamepadInput::handleMotionEvent(AInputEvent* event, PortPadState& pad, int&
     float rawR = std::max(0.0f, AMotionEvent_getAxisValue(event, AMOTION_EVENT_AXIS_RTRIGGER, 0));
     float rawGas = std::max(0.0f, AMotionEvent_getAxisValue(event, AMOTION_EVENT_AXIS_GAS, 0));
     float rTrig = std::max(rawR, rawGas);
+    float trigThreshold = std::max(0.10f, std::min(0.80f, mMapping.triggerThreshold));
 
-    if (lTrig > 0.4f) mPhysicalAxisButtons |= 0x2000; // Z button (Crouch / Ground Pound)
-    else mPhysicalAxisButtons &= ~0x2000;
+    ControllerAction actL2 = controller_mapping_get_action(&mMapping, BTN_L2);
+    ControllerAction actR2 = controller_mapping_get_action(&mMapping, BTN_R2);
 
-    if (rTrig > 0.4f) spinFrames = 6; // Spin shake
+    if (lTrig >= trigThreshold) {
+        mPhysicalAxisButtons |= controller_mapping_action_to_wpad(actL2);
+        if (controller_mapping_is_spin(actL2)) spinFrames = 6;
+    } else {
+        mPhysicalAxisButtons &= ~controller_mapping_action_to_wpad(actL2);
+    }
+
+    if (rTrig >= trigThreshold) {
+        mPhysicalAxisButtons |= controller_mapping_action_to_wpad(actR2);
+        if (controller_mapping_is_spin(actR2)) spinFrames = 6;
+    } else {
+        mPhysicalAxisButtons &= ~controller_mapping_action_to_wpad(actR2);
+    }
 
     // Right Stick (Orbital camera & Star Pointer)
     float rightX = AMotionEvent_getAxisValue(event, AMOTION_EVENT_AXIS_Z, 0);
@@ -68,14 +92,11 @@ bool GamepadInput::handleMotionEvent(AInputEvent* event, PortPadState& pad, int&
         rightX = AMotionEvent_getAxisValue(event, AMOTION_EVENT_AXIS_RX, 0);
         rightY = AMotionEvent_getAxisValue(event, AMOTION_EVENT_AXIS_RY, 0);
     }
-    float deadzone = 0.08f;
-    float mag = sqrtf(rightX * rightX + rightY * rightY);
     float rStickX = 0.0f, rStickY = 0.0f;
-    if (mag > deadzone) {
-        float scale = std::min(1.0f, (mag - deadzone) / (1.0f - deadzone));
-        rStickX = (rightX / mag) * scale;
-        rStickY = (-rightY / mag) * scale;
-    }
+    float rNorm = controller_mapping_apply_deadzone(rightX, rightY, 0.08f, &rStickX, &rStickY);
+    rStickY = -rStickY; // Invert to standard coordinate
+    if (mMapping.invertCameraY) rStickY = -rStickY;
+
     float starSens = mobile_ui::UIOverlay::get().settings().starStickSensitivity;
     if (mobile_ui::UIOverlay::get().settings().rightStickMode == 0) {
         pad.rightStickX = std::max(-1.0f, std::min(1.0f, -rStickX * starSens));
@@ -83,7 +104,7 @@ bool GamepadInput::handleMotionEvent(AInputEvent* event, PortPadState& pad, int&
     } else {
         pad.rightStickX = 0.0f;
         pad.rightStickY = 0.0f;
-        if ((fabsf(rStickX) > 0.01f || fabsf(rStickY) > 0.01f) && !touchscreenDown) {
+        if (rNorm > 0.001f && !touchscreenDown) {
             float speed = 0.035f * starSens;
             pad.pointerX = std::max(-1.0f, std::min(1.0f, pad.pointerX + rStickX * speed));
             pad.pointerY = std::max(-1.0f, std::min(1.0f, pad.pointerY - rStickY * speed));
@@ -110,116 +131,7 @@ bool GamepadInput::handleKeyEvent(AInputEvent* event, PortPadState& pad, int& sp
     int32_t keyAction = AKeyEvent_getAction(event);
     bool down = (keyAction == AKEY_EVENT_ACTION_DOWN);
 
-    switch (keyCode) {
-    case AKEYCODE_BUTTON_A:
-    case AKEYCODE_BUTTON_1:
-    case AKEYCODE_DPAD_CENTER:
-    case AKEYCODE_ENTER:
-    case AKEYCODE_NUMPAD_ENTER:
-        pad.connected = 1;
-        if (down) mPhysicalButtons |= 0x0800;  // Switch A: Jump / Confirm
-        else mPhysicalButtons &= ~0x0800;
-        break;
-    case AKEYCODE_BUTTON_B:
-    case AKEYCODE_BUTTON_2:
-    case AKEYCODE_BUTTON_C:
-        pad.connected = 1;
-        if (down) {
-            mPhysicalButtons |= 0x0800; // Jump
-            mPhysicalButtons |= 0x0400; // Cancel/Shoot
-        } else {
-            mPhysicalButtons &= ~0x0800;
-            mPhysicalButtons &= ~0x0400;
-        }
-        break;
-    case AKEYCODE_BUTTON_X:
-    case AKEYCODE_BUTTON_3:
-    case AKEYCODE_BUTTON_Y:
-    case AKEYCODE_BUTTON_4:
-        pad.connected = 1;
-        if (down) spinFrames = 6;  // Spin Attack
-        break;
-    case AKEYCODE_BUTTON_L1:
-    case AKEYCODE_BUTTON_5:
-        pad.connected = 1;
-        if (down) mPhysicalButtons |= 0x1000;  // Switch L: Camera snap behind Mario (C button)
-        else mPhysicalButtons &= ~0x1000;
-        break;
-    case AKEYCODE_BUTTON_R1:
-    case AKEYCODE_BUTTON_6:
-        pad.connected = 1;
-        if (down) {
-            pad.pointerX = 0.0f;
-            pad.pointerY = 0.0f;
-            pad.pointerValid = 1;
-            mobile_ui::UIOverlay::get().setPointerPos(0.0f, 0.0f);
-            mPhysicalButtons |= 0x1000;
-        } else {
-            mPhysicalButtons &= ~0x1000;
-        }
-        break;
-    case AKEYCODE_BUTTON_L2:
-    case AKEYCODE_BUTTON_7:
-    case AKEYCODE_BUTTON_Z:
-    case AKEYCODE_BUTTON_THUMBL:
-    case AKEYCODE_BUTTON_11:
-        pad.connected = 1;
-        if (down) mPhysicalButtons |= 0x2000;  // Crouch / Ground Pound
-        else mPhysicalButtons &= ~0x2000;
-        break;
-    case AKEYCODE_BUTTON_R2:
-    case AKEYCODE_BUTTON_8:
-        pad.connected = 1;
-        if (down) {
-            mPhysicalButtons |= 0x0400;
-            mPhysicalButtons |= 0x2000;
-        } else {
-            mPhysicalButtons &= ~0x0400;
-            mPhysicalButtons &= ~0x2000;
-        }
-        break;
-    case AKEYCODE_BUTTON_THUMBR:
-    case AKEYCODE_BUTTON_12:
-        pad.connected = 1;
-        if (down) {
-            pad.pointerX = 0.0f;
-            pad.pointerY = 0.0f;
-            pad.pointerValid = 1;
-            mobile_ui::UIOverlay::get().setPointerPos(0.0f, 0.0f);
-        }
-        break;
-    case AKEYCODE_BUTTON_START:
-    case AKEYCODE_BUTTON_10:
-    case AKEYCODE_BUTTON_SELECT:
-    case AKEYCODE_BUTTON_9:
-    case AKEYCODE_BUTTON_MODE:
-    case AKEYCODE_MENU:
-        pad.connected = 1;
-        if (down) mPhysicalButtons |= 0x0010;  // Plus / Pause
-        else mPhysicalButtons &= ~0x0010;
-        break;
-    case AKEYCODE_DPAD_UP:
-        pad.connected = 1;
-        if (down) mPhysicalButtons |= 0x0008;
-        else mPhysicalButtons &= ~0x0008;
-        break;
-    case AKEYCODE_DPAD_DOWN:
-        pad.connected = 1;
-        if (down) mPhysicalButtons |= 0x0004;
-        else mPhysicalButtons &= ~0x0004;
-        break;
-    case AKEYCODE_DPAD_LEFT:
-        pad.connected = 1;
-        if (down) mPhysicalButtons |= 0x0001;
-        else mPhysicalButtons &= ~0x0001;
-        break;
-    case AKEYCODE_DPAD_RIGHT:
-        pad.connected = 1;
-        if (down) mPhysicalButtons |= 0x0002;
-        else mPhysicalButtons &= ~0x0002;
-        break;
-    case AKEYCODE_BACK:
-    case AKEYCODE_ESCAPE:
+    if (keyCode == AKEYCODE_BACK || keyCode == AKEYCODE_ESCAPE) {
         if (down) {
             if (mobile_ui::UIOverlay::get().isSettingsOpen()) {
                 mobile_ui::UIOverlay::get().closeSettings();
@@ -230,11 +142,29 @@ bool GamepadInput::handleKeyEvent(AInputEvent* event, PortPadState& pad, int& sp
             mPhysicalButtons &= ~0x0010;
         }
         return true;
-    default:
-        return false;
     }
 
-    return true;
+    ControllerButton btn = controller_mapping_from_android_key(keyCode);
+    if (btn != BTN_COUNT) {
+        pad.connected = 1;
+        ControllerAction act = controller_mapping_get_action(&mMapping, btn);
+        uint32_t mask = controller_mapping_action_to_wpad(act);
+        if (down) {
+            mPhysicalButtons |= mask;
+            if (controller_mapping_is_spin(act)) spinFrames = 6;
+            if (controller_mapping_is_pointer_recenter(act)) {
+                pad.pointerX = 0.0f;
+                pad.pointerY = 0.0f;
+                pad.pointerValid = 1;
+                mobile_ui::UIOverlay::get().setPointerPos(0.0f, 0.0f);
+            }
+        } else {
+            mPhysicalButtons &= ~mask;
+        }
+        return true;
+    }
+
+    return false;
 }
 
 void GamepadInput::reset() {

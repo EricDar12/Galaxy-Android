@@ -95,6 +95,10 @@ inline bool applySettingLine(Settings& s, const char* line) {
     else if (!strcmp(key, "screen_orientation")) s.screenOrientationChoice = roundedClamp(value, 0, 2);
     else if (!strcmp(key, "speedrun_hud")) s.speedrunHud = on;
     else if (!strcmp(key, "haptics")) s.haptics = on;
+    else if (!strcmp(key, "controller_profile")) s.controllerProfile = roundedClamp(value, 0, 3);
+    else if (!strcmp(key, "controller_deadzone")) s.controllerDeadzone = std::max(0.05f, std::min(0.40f, value));
+    else if (!strcmp(key, "trigger_threshold")) s.triggerThreshold = std::max(0.10f, std::min(0.80f, value));
+    else if (!strcmp(key, "swap_triggers_bumpers")) s.swapTriggersBumpers = on;
     else return false;
     return true;
 }
@@ -171,6 +175,10 @@ inline std::string serializeSettings(const Settings& s) {
     appendSetting(out, "haptics", s.haptics ? 1 : 0);
     appendSetting(out, "adaptive_fps", s.adaptiveFps ? 1 : 0);
     appendSetting(out, "speedrun_hud", s.speedrunHud ? 1 : 0);
+    appendSetting(out, "controller_profile", s.controllerProfile);
+    appendSetting(out, "controller_deadzone", s.controllerDeadzone, 2);
+    appendSetting(out, "trigger_threshold", s.triggerThreshold, 2);
+    appendSetting(out, "swap_triggers_bumpers", s.swapTriggersBumpers ? 1 : 0);
     return out;
 }
 

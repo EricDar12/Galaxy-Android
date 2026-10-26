@@ -100,6 +100,12 @@ struct Settings {
     bool relativePointer = false;
     int screenOrientationChoice = 0;
 
+    // Physical Controller Mapping Settings
+    int controllerProfile = 0; // 0 = Standard/Xbox, 1 = Switch, 2 = GameCube, 3 = Custom
+    float controllerDeadzone = 0.18f;
+    float triggerThreshold = 0.40f;
+    bool swapTriggersBumpers = false;
+
     void load(const std::string& path);
     void save(const std::string& path) const;
 };

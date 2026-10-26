@@ -90,27 +90,40 @@ Galaxy Android features motion controls powered by Android's `ASensorManager`:
 
 ---
 
-## 3. Physical Gamepads (Bluetooth & USB)
+## 3. Physical Gamepads & Native Controller Mapping (Bluetooth & USB)
 
 Galaxy Android automatically detects physical gamepads connected via Bluetooth or USB-C (including Xbox Wireless, PlayStation DualShock 4 / DualSense, Switch Pro Controller, Razer Kishi, and Backbone One).
 
-### Standard Gamepad Mapping
+### Controller Profiles
 
-| Gamepad Input | Controller Signal | In-Game Action |
-|---|---|---|
-| **Left Analog Stick** | Analog Stick | 360° Movement |
-| **Right Analog Stick** | Pointer Aim | Analog Star Pointer aiming |
-| **A / Cross (✕)** | Button **A** | Jump, talk, confirm |
-| **X / Square (□)** | Shake / Motion | Star Spin attack |
-| **Right Trigger (RT / R2)** | Trigger **B** | Shoot Star Bits |
-| **Left Trigger (LT / L2)** | Trigger **Z** | Crouch, ground pound, long jump |
-| **Left Bumper (LB / L1)** | Recenter | Recenter camera behind player |
-| **Right Bumper (RB / R1)** | Shake / Motion | Spin attack (alternative) |
-| **D-Pad (Left / Right)** | Wii Remote D-Pad (L/R) | Rotate camera |
-| **D-Pad Up** | Wii Remote D-Pad Up | First-person view |
-| **D-Pad Down** | Wii Remote D-Pad Down | Recenter camera / Page down |
-| **Start / Options / +** | Wii Remote **+** | Pause menu |
-| **Select / Share / −** | Wii Remote **−** | Pause menu (alternative) |
+Galaxy Android includes hardware layout presets accessible through the Settings configuration:
+
+| Physical Button | Standard / Xbox Layout | Switch Pro Layout | GameCube Retro Layout |
+|---|---|---|---|
+| **South Button** (A / B / ✕) | **Jump / Confirm** (WPAD A) | **Jump / Confirm** (WPAD A) | **Jump / Confirm** (WPAD A) |
+| **West Button** (X / Y / □) | **Star Spin Attack** | **Star Spin Attack** | **Star Spin Attack** |
+| **East Button** (B / A / ○) | **Shoot Star Bits / Cancel** | **Shoot Star Bits / Cancel** | **Shoot Star Bits / Cancel** |
+| **North Button** (Y / X / △) | **Star Spin Attack** | **Pointer Recenter** | **Pointer Recenter** |
+| **Left Bumper (L1 / LB)** | **Camera Snap Behind** (WPAD C) | **Camera Snap Behind** (WPAD C) | **Star Spin Attack** |
+| **Right Bumper (R1 / RB)** | **Recenter Star Pointer** | **Star Spin Attack** | **Camera Snap Behind** (WPAD C) |
+| **Left Trigger (L2 / LT)** | **Crouch / Ground Pound** (WPAD Z) | **Crouch / Ground Pound** (WPAD Z) | **Crouch / Ground Pound** (WPAD Z) |
+| **Right Trigger (R2 / RT)** | **Shoot Star Bits** (WPAD B) | **Shoot Star Bits** (WPAD B) | **Shoot Star Bits** (WPAD B) |
+| **L3 (Left Stick Click)** | **Crouch / Ground Pound** | **Crouch / Ground Pound** | **Crouch / Ground Pound** |
+| **R3 (Right Stick Click)** | **Recenter Star Pointer** | **Recenter Star Pointer** | **Recenter Star Pointer** |
+| **D-Pad (Left / Right)** | **Camera Orbit 45°** | **Camera Orbit 45°** | **Camera Orbit 45°** |
+| **D-Pad Up** | **First-Person View** | **First-Person View** | **First-Person View** |
+| **D-Pad Down** | **Recenter Camera** | **Recenter Camera** | **Recenter Camera** |
+| **Start / + / Menu** | **Pause Menu** (WPAD +) | **Pause Menu** (WPAD +) | **Pause Menu** (WPAD +) |
+
+### Deadzone & Trigger Calibration
+
+- **Analog Stick Deadzone**: Configurable radial deadzone (`controller_deadzone=0.18`, 5% to 40%). Clamps unwanted drift on older physical thumbsticks without deadzone latency.
+- **Trigger Actuation Threshold**: Configurable analog threshold (`trigger_threshold=0.40`, 10% to 80%). Controls how far L2 / R2 must be pressed before registering in-game crouch or shoot actions.
+- **Trigger / Bumper Swap**: Toggle `swap_triggers_bumpers=1` to switch L1/L2 and R1/R2 on controllers with digital microswitch triggers.
+- **Dual-Stick Camera & Star Pointer Modes**:
+  - `rightStickMode = 0`: Orbital camera rotation around Mario.
+  - `rightStickMode = 1`: Direct analog Star Pointer navigation with sensitivity scaling (`starStickSensitivity`).
+- **One-Tap Pointer Recenter**: Pressing R3 (Right Stick Click) or the mapped recenter bumper snaps the Star Pointer directly to screen center `(0.0, 0.0)`.
 
 ---
 

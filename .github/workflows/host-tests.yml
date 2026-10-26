@@ -56,7 +56,7 @@ jobs:
                      guest_memory_test guest_reserve_linux_test timing_pacing_test \
                      settings_persistence_test thp_bounds_test heap_alignment_test \
                      save_sync_test dolphin_converter_test wstring_format_test netplay_test \
-                     vk_texture_staging_test
+                     vk_texture_staging_test controller_mapping_test
           ctest --test-dir build-host --output-on-failure
 
       - name: Reservation tests under UBSan

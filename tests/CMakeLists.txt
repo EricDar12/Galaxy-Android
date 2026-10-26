@@ -163,6 +163,15 @@ target_include_directories(vk_texture_staging_test PRIVATE
 )
 add_test(NAME vk_texture_staging COMMAND vk_texture_staging_test)
 
+add_executable(controller_mapping_test
+  test_controller_mapping.cpp
+  ${CMAKE_SOURCE_DIR}/platform/src/port/controller_mapping.cpp
+)
+target_include_directories(controller_mapping_test PRIVATE
+  ${CMAKE_SOURCE_DIR}/platform/include
+)
+add_test(NAME controller_mapping COMMAND controller_mapping_test)
+
 # Run under CTest without depending on which libstdc++ happens to be first on
 # PATH; an older MSYS2 runtime can lack symbols the compiler emits.
 get_property(_all_test_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)

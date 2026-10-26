@@ -62,9 +62,22 @@ We express our deepest thanks to our contributors and the community for keeping 
 - **Dual Persistent Mirroring**: Automatically maintains mirrored save backups between NAND internal storage and `/sdcard/GalaxyData/saves/GameData.bin`. If game NAND data is ever cleared, saves are restored on boot.
 - **One-Tap Save Export**: Export saves directly to your device's `Download` folder for backup or cross-device transfer.
 
-### Comprehensive Gamepad & Handheld Console Support
-- Native plug-and-play support for Bluetooth and USB gamepads (Xbox Wireless, PlayStation DualSense / DualShock 4, Switch Pro, Razer Kishi, Backbone One, etc.).
-- Configured with `android.hardware.touchscreen` optional (`required="false"`) and `android.hardware.gamepad` enabled for full compatibility with Android TV and dedicated gaming handhelds (Odin, Retroid Pocket, Logitech G Cloud).
+### Native Controller Mapping & Handheld Console Support
+- **Multi-Profile Hardware Controller Presets**:
+  - **Standard / Xbox Layout**: South (A) = Jump, West (X) = Spin Attack, East (B) = Shoot / Cancel, North (Y) = Spin Attack, L1 = Camera Snap, R1 = Star Pointer Recenter, L2 = Crouch / Ground Pound, R2 = Shoot.
+  - **Nintendo Switch Pro Layout**: South (B) = Jump, West (Y) = Spin Attack, East (A) = Shoot / Cancel, North (X) = Star Pointer Recenter, L1 = Camera Snap, R1 = Spin Attack, L2 = Crouch / Ground Pound, R2 = Shoot.
+  - **GameCube / Classic Retro Layout**: South (A) = Jump, West (B) = Spin Attack, East (Y) = Shoot, North (X) = Pointer Recenter, L2 = Crouch / Ground Pound, R1 = Camera Snap, L1 = Spin Attack.
+  - **Custom User Remapping**: Remap any action to any physical button or trigger via persistent configuration.
+- **Hardware Trigger & Deadzone Calibration**:
+  - Radial analog deadzone calibration (5% to 40% threshold) eliminating stick drift on worn physical controllers.
+  - Configurable analog trigger actuation threshold (10% to 80% pull depth) for L2/R2 triggers.
+  - One-tap Trigger / Bumper swap toggle (`swap_triggers_bumpers`) for personal tactile preference.
+- **Dual-Stick Camera Orbit & Star Pointer Navigation**:
+  - Right analog stick switchable between 360° orbital camera control and smooth analog Star Pointer aiming.
+  - Instant Star Pointer screen-center alignment on R3 (Right Thumbstick click) or R1 bumper.
+- **Dedicated Handheld Console Ergonomics**:
+  - Full out-of-the-box compatibility with Ayn Odin 2, Retroid Pocket 4/5, Logitech G Cloud, and Android TV consoles.
+  - Automatic touchscreen HUD suppression upon physical controller input detection.
 
 ### Frosted Glass Minimalist Touch Controls
 - **Sleek Translucent Dark Glass Theme**: Semi-transparent frosted glass backplates with luminous perimeter rings and tactile depression feedback.
