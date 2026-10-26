@@ -217,4 +217,43 @@ void port_perf_menu_event(int opened) {
     sMenuOpen = (opened != 0);
 }
 
+int port_perf_export_json(char* out, int maxBytes) {
+    if (!out || maxBytes <= 0) return 0;
+    std::lock_guard<std::mutex> lock(sLock);
+    int64_t now = port_host_time_ns();
+    double secs = (now - sWindowStart) / 1e9;
+    double fps = secs > 0.0 ? sFrames / secs : 0.0;
+    double p50 = 0.0, p95 = 0.0, p99 = 0.0;
+    computePercentiles(p50, p95, p99);
+
+    return snprintf(out, maxBytes,
+        "{\"fps\":%.2f,\"p50_ms\":%.2f,\"p95_ms\":%.2f,\"p99_ms\":%.2f,"
+        "\"work_avg_ms\":%.2f,\"work_max_ms\":%.2f,\"record_avg_ms\":%.2f,"
+        "\"render_cpu_avg_ms\":%.2f,\"render_cpu_max_ms\":%.2f,\"upload_avg_ms\":%.2f,"
+        "\"gpu_wait_avg_ms\":%.2f,\"present_avg_ms\":%.2f,\"pace_avg_ms\":%.2f,"
+        "\"shader_compiles\":%u,\"pipeline_creates\":%u,\"scene\":\"%s\",\"menu_open\":%s}",
+        fps, p50, p95, p99, sWork.avg(), sWork.max, sRecord.avg(),
+        sRenderCpu.avg(), sRenderCpu.max, sUpload.avg(), sGpuWait.avg(),
+        sPresent.avg(), sPace.avg(), sShaderCompile.count, sPipelineCreate.count,
+        sCurrentScene, sMenuOpen ? "true" : "false");
+}
+
+int port_perf_export_csv(char* out, int maxBytes) {
+    if (!out || maxBytes <= 0) return 0;
+    std::lock_guard<std::mutex> lock(sLock);
+    int64_t now = port_host_time_ns();
+    double secs = (now - sWindowStart) / 1e9;
+    double fps = secs > 0.0 ? sFrames / secs : 0.0;
+    double p50 = 0.0, p95 = 0.0, p99 = 0.0;
+    computePercentiles(p50, p95, p99);
+
+    return snprintf(out, maxBytes,
+        "metric,value\nfps,%.2f\np50_ms,%.2f\np95_ms,%.2f\np99_ms,%.2f\n"
+        "work_avg_ms,%.2f\nrender_cpu_avg_ms,%.2f\nupload_avg_ms,%.2f\n"
+        "present_avg_ms,%.2f\npace_avg_ms,%.2f\npipeline_creates,%u\n",
+        fps, p50, p95, p99, sWork.avg(), sRenderCpu.avg(), sUpload.avg(),
+        sPresent.avg(), sPace.avg(), sPipelineCreate.count);
+}
+
 }  // extern "C"
+

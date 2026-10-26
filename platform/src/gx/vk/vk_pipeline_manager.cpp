@@ -1,34 +1,11 @@
 #include "gx/vk/vk_common.h"
 #include "gx/vk_shader_inventory.h"
 #include "gx/vk/vk_pipeline_blend.h"
+#include "gx/vk/vk_pipeline_key_util.h"
 
 namespace gpu {
 
 static uint64_t sPlaceholderDraws = 0;
-
-PipelineKey pipelineKeyFor(const Item& it, const ShaderUid& uid) {
-    DecodedPipelineKey d{};
-    d.uid = uid;
-    d.vtxFlags = it.flags;
-    d.depthTest = (it.depthTest != 0);
-    d.depthWrite = (it.depthTest && it.depthWrite);
-    d.depthCompareOp = toCanonicalDepthFunc(it.depthFunc);
-
-    d.blendEnable = (it.blend != 0) || (it.dstAlpha != 0);
-    d.srcColorBlendFactor = toCanonicalBlendFactor(it.blend ? it.srcRGB : 1);
-    d.dstColorBlendFactor = toCanonicalBlendFactor(it.blend ? it.dstRGB : 0);
-    d.colorBlendOp = toCanonicalBlendOp(it.blend ? it.eq : 0x8006);
-    d.srcAlphaBlendFactor = toCanonicalBlendFactor(it.dstAlpha ? 0x8003 : (it.blend ? it.srcRGB : 1));
-    d.dstAlphaBlendFactor = toCanonicalBlendFactor(it.dstAlpha ? 0 : (it.blend ? it.dstRGB : 0));
-    d.alphaBlendOp = toCanonicalBlendOp(it.dstAlpha ? 0x8006 : (it.blend ? it.eq : 0x8006));
-    d.colorWriteMask = it.colorMask & 0x0Fu;
-    d.blendConstantAlpha = it.dstAlphaValue;
-
-    d.cullMode = toCanonicalCullMode(it.cull != 0, it.cullFace);
-    d.topology = toCanonicalTopology(it.prim);
-    d.frontFace = CanonicalFrontFace::CounterClockwise;
-    return encodePipelineKey(d);
-}
 
 VkPipeline VkRenderer::getPipeline(const Item& it, const ShaderUid& uid) {
     const PipelineKey key = pipelineKeyFor(it, uid);
@@ -37,11 +14,16 @@ VkPipeline VkRenderer::getPipeline(const Item& it, const ShaderUid& uid) {
         return cached;
     }
     mPipelineMruMisses++;
-    // Catalogue probe before the miss is recorded, so it answers "was this UID
-    // known before this draw?" rather than trivially true.
+
+    for (size_t i = 0; i < mPipelineL2.size(); ++i) {
+        if (mPipelineL2[i].pipeline != VK_NULL_HANDLE && mPipelineL2[i].key == key) {
+            VkPipeline p = mPipelineL2[i].pipeline;
+            mPipelineMru.store(key, p);
+            return p;
+        }
+    }
+
     const bool uidAlreadyCatalogued = ShaderInventory::get().hasUid(uid);
-    // Sampled before this key is catalogued, so it compares against the cooked
-    // catalogue rather than against itself.
     uint32_t uidDiffWords[8] = {0};
     size_t uidDiff = SIZE_MAX;
     if (!uidAlreadyCatalogued && mRuntimePipelineCreates < 8) {
@@ -50,6 +32,8 @@ VkPipeline VkRenderer::getPipeline(const Item& it, const ShaderUid& uid) {
     auto pit = mPipelines.find(key);
     if (pit != mPipelines.end() && pit->second != VK_NULL_HANDLE) {
         mPipelineMru.store(key, pit->second);
+        mPipelineL2[mPipelineL2Head] = {key, pit->second};
+        mPipelineL2Head = (mPipelineL2Head + 1) & 3;
         return pit->second;
     }
 
@@ -67,6 +51,8 @@ VkPipeline VkRenderer::getPipeline(const Item& it, const ShaderUid& uid) {
     VkPipeline created = createPipeline(key, vsSpirv, fsSpirv);
     if (created != VK_NULL_HANDLE) {
         mPipelineMru.store(key, created);
+        mPipelineL2[mPipelineL2Head] = {key, created};
+        mPipelineL2Head = (mPipelineL2Head + 1) & 3;
         mRuntimePipelineCreates++;
         if (uidAlreadyCatalogued) mRuntimeCreatesKnownUid++;
         if (mRuntimePipelineCreates <= 32) {

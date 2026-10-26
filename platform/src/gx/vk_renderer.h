@@ -237,6 +237,17 @@ public:
   // Caches
   std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash> mPipelines;
   PipelineMru mPipelineMru;
+  struct PipelineL2Entry {
+    PipelineKey key{};
+    VkPipeline pipeline = VK_NULL_HANDLE;
+  };
+  std::array<PipelineL2Entry, 4> mPipelineL2{};
+  size_t mPipelineL2Head = 0;
+  void resetPipelineCaches() {
+    mPipelineMru.reset();
+    mPipelineL2.fill(PipelineL2Entry{});
+    mPipelineL2Head = 0;
+  }
   uint64_t mPipelineMruHits = 0;
   uint64_t mPipelineMruMisses = 0;
   // Pipeline keys created at runtime (not prewarmed) and how many of those

@@ -141,6 +141,8 @@ add_test(NAME wstring_format COMMAND wstring_format_test)
 add_executable(netplay_test
   test_netplay.cpp
   ${CMAKE_SOURCE_DIR}/platform/src/net/NetSocket.cpp
+  ${CMAKE_SOURCE_DIR}/platform/src/net/NetplayPackets.cpp
+  ${CMAKE_SOURCE_DIR}/platform/src/net/NetplayManager.cpp
 )
 target_include_directories(netplay_test PRIVATE
   ${CMAKE_SOURCE_DIR}/platform/include

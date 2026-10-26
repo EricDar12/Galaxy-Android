@@ -175,7 +175,7 @@ void VkRenderer::shutdown() {
             if (pair.second) vkDestroyPipeline(mDevice, pair.second, nullptr);
         }
         mPipelines.clear();
-        mPipelineMru.reset();
+        resetPipelineCaches();
 
         mSamplerDescSets.clear();
         mPendingDescSetFrees.clear();

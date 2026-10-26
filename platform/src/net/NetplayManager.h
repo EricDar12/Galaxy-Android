@@ -42,13 +42,15 @@ public:
     bool takeWarpEvent(std::string& outStage, int& outScenario);
     bool takeSpinEvent();
 
+    // Production incoming packet parser (invoked by workerLoop and validation tests)
+    void handleIncomingPacket(const uint8_t* data, size_t size,
+                             const std::string& srcIp, int srcPort);
+
 private:
     NetplayManager();
     ~NetplayManager();
 
     void workerLoop();
-    void handleIncomingPacket(const uint8_t* data, size_t size,
-                             const std::string& srcIp, int srcPort);
     void sendPacket(uint8_t type, const void* payload, size_t payloadSize,
                     const std::string& destIp, int destPort);
 

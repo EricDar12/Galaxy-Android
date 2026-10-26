@@ -227,8 +227,8 @@ void VkRenderer::onWindowResized(ANativeWindow* window) {
                 if (pair.second) vkDestroyPipeline(mDevice, pair.second, nullptr);
             }
             mPipelines.clear();
-            // The handles above are gone; the MRU entry must not survive them.
-            mPipelineMru.reset();
+            // The handles above are gone; cached pipeline entries must not survive them.
+            resetPipelineCaches();
             if (!createRenderPasses() || !createPresentationPipeline() || !createUiPipeline()) {
                 LOGE("Failed to rebuild the swapchain-format dependent state");
                 return;

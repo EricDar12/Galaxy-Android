@@ -224,6 +224,8 @@ void port_perf_pipeline_create(int64_t ns); // runtime graphics pipeline creatio
 void port_perf_queue_wait(int64_t ns);     // fence/queue submission wait duration
 void port_perf_scene_transition(const char* scene); // scene change tracker
 void port_perf_menu_event(int opened);     // menu opened/closed tracker
+int port_perf_export_json(char* outBuffer, int maxBytes);
+int port_perf_export_csv(char* outBuffer, int maxBytes);
 
 #ifdef __cplusplus
 }

@@ -8,15 +8,18 @@ static uint64_t sUploadRecorded = 0;
 static uint64_t sUploadBytes = 0;
 
 void VkRenderer::uploadTextures(VkCommandBuffer cmd, const std::vector<std::shared_ptr<TexImage>>& textures) {
-    if (cmd == VK_NULL_HANDLE) return;
-    struct UploadItem {
+    if (cmd == VK_NULL_HANDLE || textures.empty()) return;
+
+    struct BatchItem {
         std::shared_ptr<TexImage> img;
         VkTexture vt;
-        VkBuffer stagingBuf;
-        VkDeviceMemory stagingMem;
-        VkDeviceSize stagingSize;
+        VkDeviceSize stagingOffset;
+        VkDeviceSize requiredBytes;
+        uint32_t levels;
     };
-    std::vector<UploadItem> pending;
+    std::vector<BatchItem> toUpload;
+    toUpload.reserve(textures.size());
+    VkDeviceSize totalStagingBytes = 0;
 
     for (const auto& img : textures) {
         if (!img || img->rgba.empty() || img->width == 0 || img->height == 0) continue;
@@ -65,8 +68,6 @@ void VkRenderer::uploadTextures(VkCommandBuffer cmd, const std::vector<std::shar
 
         if (img->vkView != 0 || img->vkImage != 0 || img->vkMemory != 0) {
             if (sameDevice) {
-                // Descriptor sets still cached for this view would dangle once
-                // the view is destroyed, so drop them first.
                 if (img->vkView) invalidateSamplerDescSetsForView((VkImageView)img->vkView);
                 if (img->vkView) vkDestroyImageView(mDevice, (VkImageView)img->vkView, nullptr);
                 if (img->vkImage) vkDestroyImage(mDevice, (VkImage)img->vkImage, nullptr);
@@ -140,41 +141,48 @@ void VkRenderer::uploadTextures(VkCommandBuffer cmd, const std::vector<std::shar
             continue;
         }
 
-        VkBuffer stagingBuf = VK_NULL_HANDLE;
-        VkDeviceMemory stagingMem = VK_NULL_HANDLE;
-        const VkDeviceSize uploadBytes = requiredBytes;
-        if (!createBuffer(uploadBytes, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                          stagingBuf, stagingMem)) {
-            LOGE("uploadTextures: createBuffer failed for staging buffer (%llu bytes)", (unsigned long long)uploadBytes);
-            vkDestroyImageView(mDevice, vt.view, nullptr);
-            vkDestroyImage(mDevice, vt.image, nullptr);
-            vkFreeMemory(mDevice, vt.memory, nullptr);
-            sUploadFailed++;
-            continue;
-        }
-
-        void* mapped = nullptr;
-        VkResult mapRes = vkMapMemory(mDevice, stagingMem, 0, uploadBytes, 0, &mapped);
-        if (mapRes != VK_SUCCESS || !mapped) {
-            LOGE("uploadTextures: vkMapMemory failed (%d) for staging buffer (%llu bytes)", (int)mapRes, (unsigned long long)uploadBytes);
-            vkDestroyBuffer(mDevice, stagingBuf, nullptr);
-            vkFreeMemory(mDevice, stagingMem, nullptr);
-            vkDestroyImageView(mDevice, vt.view, nullptr);
-            vkDestroyImage(mDevice, vt.image, nullptr);
-            vkFreeMemory(mDevice, vt.memory, nullptr);
-            sUploadFailed++;
-            continue;
-        }
-
-        memcpy(mapped, img->rgba.data(), uploadBytes);
-        vkUnmapMemory(mDevice, stagingMem);
-        pending.push_back({img, vt, stagingBuf, stagingMem, uploadBytes});
+        VkDeviceSize alignedOffset = (totalStagingBytes + 63) & ~63ULL;
+        totalStagingBytes = alignedOffset + requiredBytes;
+        toUpload.push_back({img, vt, alignedOffset, requiredBytes, levels});
     }
 
-    if (pending.empty()) return;
+    if (toUpload.empty()) return;
 
-    for (const auto& item : pending) {
+    VkBuffer stagingBuf = VK_NULL_HANDLE;
+    VkDeviceMemory stagingMem = VK_NULL_HANDLE;
+    if (!createBuffer(totalStagingBytes, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                      stagingBuf, stagingMem)) {
+        LOGE("uploadTextures: createBuffer failed for batch staging (%llu bytes)", (unsigned long long)totalStagingBytes);
+        for (auto& item : toUpload) {
+            vkDestroyImageView(mDevice, (VkImageView)item.vt.view, nullptr);
+            vkDestroyImage(mDevice, (VkImage)item.vt.image, nullptr);
+            vkFreeMemory(mDevice, (VkDeviceMemory)item.vt.memory, nullptr);
+            sUploadFailed++;
+        }
+        return;
+    }
+
+    void* mapped = nullptr;
+    if (vkMapMemory(mDevice, stagingMem, 0, totalStagingBytes, 0, &mapped) != VK_SUCCESS || !mapped) {
+        LOGE("uploadTextures: vkMapMemory failed for batch staging (%llu bytes)", (unsigned long long)totalStagingBytes);
+        vkDestroyBuffer(mDevice, stagingBuf, nullptr);
+        vkFreeMemory(mDevice, stagingMem, nullptr);
+        for (auto& item : toUpload) {
+            vkDestroyImageView(mDevice, (VkImageView)item.vt.view, nullptr);
+            vkDestroyImage(mDevice, (VkImage)item.vt.image, nullptr);
+            vkFreeMemory(mDevice, (VkDeviceMemory)item.vt.memory, nullptr);
+            sUploadFailed++;
+        }
+        return;
+    }
+
+    for (const auto& item : toUpload) {
+        memcpy((uint8_t*)mapped + item.stagingOffset, item.img->rgba.data(), item.requiredBytes);
+    }
+    vkUnmapMemory(mDevice, stagingMem);
+
+    for (const auto& item : toUpload) {
         VkImageMemoryBarrier barrierToDst{};
         barrierToDst.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
         barrierToDst.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -192,17 +200,10 @@ void VkRenderer::uploadTextures(VkCommandBuffer cmd, const std::vector<std::shar
                              VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrierToDst);
 
         std::vector<VkBufferImageCopy> regions(item.vt.levels);
-        VkDeviceSize offset = 0;
+        VkDeviceSize offset = item.stagingOffset;
         uint32_t w = item.vt.width, h = item.vt.height;
-        bool regionSafe = true;
         for (uint32_t l = 0; l < item.vt.levels; l++) {
             VkDeviceSize levelBytes = (VkDeviceSize)w * h * 4;
-            if (offset + levelBytes > item.stagingSize) {
-                LOGE("uploadTextures: copy region bounds overflow level %u: offset %llu + bytes %llu > total %llu",
-                     l, (unsigned long long)offset, (unsigned long long)levelBytes, (unsigned long long)item.stagingSize);
-                regionSafe = false;
-                break;
-            }
             regions[l].bufferOffset = offset;
             regions[l].imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             regions[l].imageSubresource.mipLevel = l;
@@ -212,12 +213,8 @@ void VkRenderer::uploadTextures(VkCommandBuffer cmd, const std::vector<std::shar
             w = w > 1 ? w / 2 : 1;
             h = h > 1 ? h / 2 : 1;
         }
-        if (!regionSafe) {
-            sUploadFailed++;
-            continue;
-        }
 
-        vkCmdCopyBufferToImage(cmd, item.stagingBuf, item.vt.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        vkCmdCopyBufferToImage(cmd, stagingBuf, item.vt.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                (uint32_t)regions.size(), regions.data());
 
         VkImageMemoryBarrier barrierToShader = barrierToDst;
@@ -235,10 +232,11 @@ void VkRenderer::uploadTextures(VkCommandBuffer cmd, const std::vector<std::shar
         item.img->vkVersion = item.vt.version;
         item.img->vkGeneration = sVkDeviceGeneration;
 
-        mStagingBuffersToFree.push_back({item.stagingBuf, item.stagingMem});
         sUploadRecorded++;
         sUploadBytes += (item.img->rgba.size() * sizeof(uint32_t));
     }
+
+    mStagingBuffersToFree.push_back({stagingBuf, stagingMem});
 
     if (sUploadRecorded % 200 == 0) {
         LOGI("VkRenderer textures: %llu attempted, %llu recorded, %llu failed, %llu KB staged",

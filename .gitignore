@@ -72,3 +72,4 @@ platform/mobile/libs/
 *.log
 .DS_Store
 Thumbs.db
+artifacts/
