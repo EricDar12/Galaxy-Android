@@ -148,7 +148,7 @@ def main():
     args = parser.parse_args()
 
     if args.input_file:
-        with open(args.input_file, "r", encoding="utf-8") as f:
+        with open(args.input_file, "r", encoding="utf-8", errors="replace") as f:
             log_text = f.read()
     elif args.device:
         log_text = run_adb_capture(args.duration)
