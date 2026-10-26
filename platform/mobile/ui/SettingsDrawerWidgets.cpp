@@ -60,6 +60,14 @@ void SettingsMenuHandler::drawSliderRow(VertexBatcher& vb, const MenuRowDef& r, 
         curVal = settings.starStickSensitivity;
         snprintf(valBuf, sizeof(valBuf), "%.0f%%", curVal * 100.0f);
         break;
+    case ACT_CONTROLLER_DEADZONE:
+        curVal = settings.controllerDeadzone;
+        snprintf(valBuf, sizeof(valBuf), "%.0f%%", curVal * 100.0f);
+        break;
+    case ACT_TRIGGER_THRESHOLD:
+        curVal = settings.triggerThreshold;
+        snprintf(valBuf, sizeof(valBuf), "%.0f%%", curVal * 100.0f);
+        break;
     case ACT_TARGET_FPS:
         curVal = (float)settings.targetFps;
         snprintf(valBuf, sizeof(valBuf), "%d FPS", settings.targetFps);
@@ -118,6 +126,7 @@ void SettingsMenuHandler::drawDropdownRow(VertexBatcher& vb, const MenuRowDef& r
     int activeIdx = 0;
     switch (r.action) {
     case ACT_JOYSTICK_MODE: activeIdx = settings.dynamicStick ? 0 : 1; break;
+    case ACT_CONTROLLER_PROFILE: activeIdx = std::max(0, std::min(3, settings.controllerProfile)); break;
     case ACT_RIGHT_STICK_MODE: activeIdx = (settings.rightStickMode == 1) ? 1 : 0; break;
     case ACT_DPAD_SIDE: activeIdx = settings.dpadOnRight ? 1 : 0; break;
     case ACT_RENDER_SCALE: activeIdx = std::max(0, std::min(3, settings.renderScale)); break;

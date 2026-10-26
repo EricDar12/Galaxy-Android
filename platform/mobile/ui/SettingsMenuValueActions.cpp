@@ -65,6 +65,16 @@ void SettingsMenuActions::applySliderValue(MenuActionId action, float value, Set
         snprintf(msg, sizeof(msg), "Star Stick Sensitivity: %.0f%%", settings.starStickSensitivity * 100.0f);
         outToastMsg = msg;
         break;
+    case ACT_CONTROLLER_DEADZONE:
+        settings.controllerDeadzone = std::max(0.05f, std::min(0.40f, value));
+        snprintf(msg, sizeof(msg), "Stick Deadzone: %.0f%%", settings.controllerDeadzone * 100.0f);
+        outToastMsg = msg;
+        break;
+    case ACT_TRIGGER_THRESHOLD:
+        settings.triggerThreshold = std::max(0.10f, std::min(0.80f, value));
+        snprintf(msg, sizeof(msg), "Trigger Threshold: %.0f%%", settings.triggerThreshold * 100.0f);
+        outToastMsg = msg;
+        break;
     case ACT_TARGET_FPS: {
         int fps = (value < 45.0f) ? 30 : (value < 75.0f) ? 60 : (value < 105.0f) ? 90 : (value < 132.0f) ? 120 : 144;
         settings.targetFps = fps;
@@ -94,6 +104,13 @@ void SettingsMenuActions::applyDropdownSelection(MenuActionId action, int select
         settings.dynamicStick = (selectedIdx == 0);
         outToastMsg = settings.dynamicStick ? "Joystick: Dynamic Anchor" : "Joystick: Fixed Anchor";
         break;
+    case ACT_CONTROLLER_PROFILE: {
+        settings.controllerProfile = std::max(0, std::min(3, selectedIdx));
+        const char* pNames[] = {"Profile: Xbox / Standard", "Profile: Switch Pro",
+                                "Profile: GameCube", "Profile: Custom"};
+        outToastMsg = pNames[settings.controllerProfile];
+        break;
+    }
     case ACT_RIGHT_STICK_MODE:
         settings.rightStickMode = (selectedIdx == 1) ? 1 : 0;
         outToastMsg = (settings.rightStickMode == 1) ? "Right Stick: Star Pointer" : "Right Stick: 360 Camera Orbit";

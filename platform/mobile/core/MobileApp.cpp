@@ -58,6 +58,7 @@ void MobileApp::handleAppCmd(int32_t cmd) {
         int initialFps = mobile_ui::startupDisplayRefreshRate(mobile_ui::UIOverlay::get().settings());
         mobile_system::SystemManager::setPreferredRefreshRate(mAndroid, (float)initialFps);
         mWindowReady = true;
+        syncControllerSettings();
         break;
     }
     case APP_CMD_TERM_WINDOW:
@@ -81,6 +82,7 @@ void MobileApp::handleAppCmd(int32_t cmd) {
         mobile_input::Sensors::get().setActive(true);
         port_audio_resume();
         port_set_paused(0);
+        syncControllerSettings();
         break;
     case APP_CMD_PAUSE:
         LOGI("APP_CMD_PAUSE");
@@ -127,6 +129,7 @@ int32_t MobileApp::handleInputEvent(AInputEvent* event) {
         if (mobile_ui::UIOverlay::get().handleInput(event, mPad, mSpinFrames,
                                                     mScreenWidth, mScreenHeight,
                                                     ptrBounds.x, ptrBounds.y, ptrBounds.w, ptrBounds.h)) {
+            syncControllerSettings();
             updateInputState();
             return 1;
         }
@@ -154,6 +157,10 @@ void MobileApp::updateInputState() {
     port_input_set(0, &mPad);
 }
 
+void MobileApp::syncControllerSettings() {
+    mGamepad.applySettings(mobile_ui::UIOverlay::get().settings());
+}
+
 void MobileApp::shutdownVulkan() {
     if (!mVkReady) return;
     if (mVkTarget.framebuffer) gpu::VkRenderer::get().destroyTarget(mVkTarget);
@@ -169,12 +176,8 @@ void MobileApp::run(android_app* app, uintptr_t windowBase, size_t windowSize) {
 
     mAndroid = app;
     app->userData = this;
-    app->onAppCmd = [](android_app* a, int32_t cmd) {
-        MobileApp::get().handleAppCmd(cmd);
-    };
-    app->onInputEvent = [](android_app* a, AInputEvent* ev) -> int32_t {
-        return MobileApp::get().handleInputEvent(ev);
-    };
+    app->onAppCmd = [](android_app* a, int32_t cmd) { MobileApp::get().handleAppCmd(cmd); };
+    app->onInputEvent = [](android_app* a, AInputEvent* ev) -> int32_t { return MobileApp::get().handleInputEvent(ev); };
 
     mobile_input::Sensors::get().init(app);
     port_mem_set_reserved_window(windowBase, windowSize);
@@ -191,6 +194,7 @@ void MobileApp::run(android_app* app, uintptr_t windowBase, size_t windowSize) {
     mSaveRoot = internalPath + "/nand";
     mkdir(mSaveRoot.c_str(), 0770);
     mobile_ui::UIOverlay::get().setSavePath(mSaveRoot + (isPlus ? "/touch_settings_plus.ini" : "/touch_settings.ini"));
+    syncControllerSettings();
 
     int initialFps = mobile_ui::startupDisplayRefreshRate(mobile_ui::UIOverlay::get().settings());
     mobile_system::SystemManager::setPreferredRefreshRate(app, (float)initialFps);
@@ -281,9 +285,6 @@ void MobileApp::run(android_app* app, uintptr_t windowBase, size_t windowSize) {
     }
 
     LOGI("GalaxyMobile exiting cleanly");
-    // The emulated game runs on detached threads that have no join protocol,
-    // so halt it and release everything owned by this thread before returning
-    // through android_native_app_glue's teardown path.
     port_set_paused(1);
     port_audio_pause();
     mobile_input::Sensors::get().setActive(false);

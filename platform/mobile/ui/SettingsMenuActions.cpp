@@ -153,6 +153,10 @@ bool SettingsMenuActions::dispatch(MenuActionId action, float px, float midX, fl
         settings.haptics = !settings.haptics;
         outToastMsg = settings.haptics ? "Vibration Haptics: ON" : "Vibration Haptics: OFF";
         break;
+    case ACT_SWAP_TRIGGERS_BUMPERS:
+        settings.swapTriggersBumpers = !settings.swapTriggersBumpers;
+        outToastMsg = settings.swapTriggersBumpers ? "Swap Triggers/Bumpers: ON" : "Swap Triggers/Bumpers: OFF";
+        break;
     case ACT_RENDER_SCALE: {
         int idx = std::max(0, std::min(3, (int)(relX / (contentW / 4.0f))));
         settings.renderScale = idx;

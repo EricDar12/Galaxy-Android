@@ -286,7 +286,7 @@ def main():
     p = m["frame_time_percentiles_ms"]
     print(f"=== Super Mario Galaxy Android Benchmark Results [Mode: {meta['mode']}] ===\n"
           f"Average FPS:          {'N/A (unavailable)' if m['average_fps'] is None else m['average_fps']}\n"
-          f"Frame Time P50:       {'N/A (unavailable)' if p['p50'] is None else str(p['p50']) + ' ms'} ({summary['metadata']['percentile_source']})\n"
+          f"Frame Time P50:       {'N/A (unavailable)' if p['p50'] is None else str(p['p50']) + ' ms (' + summary['metadata']['percentile_source'] + ')'}\n"
           f"Frame Time P95:       {'N/A (unavailable)' if p['p95'] is None else str(p['p95']) + ' ms'}\n"
           f"Frame Time P99:       {'N/A (unavailable)' if p['p99'] is None else str(p['p99']) + ' ms'}\n"
           f"Draw Calls / Frame:   {'N/A (unavailable)' if m['draw_calls_per_frame_avg'] is None else m['draw_calls_per_frame_avg']}\n"

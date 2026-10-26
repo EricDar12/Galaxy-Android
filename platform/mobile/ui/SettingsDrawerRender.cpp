@@ -82,6 +82,7 @@ void SettingsMenuHandler::renderDrawer(VertexBatcher& vb, int screenW, int scree
             case ACT_RELATIVE_POINTER: swOn = settings.relativePointer; break;
             case ACT_FULL_TOUCH_MODE: swOn = settings.fullTouchMode; break;
             case ACT_HAPTICS: swOn = settings.haptics; break;
+            case ACT_SWAP_TRIGGERS_BUMPERS: swOn = settings.swapTriggersBumpers; break;
             case ACT_BATTERY_SAVER: swOn = settings.batterySaver; break;
             case ACT_VULKAN_POSTPROCESS: swOn = (port_is_post_processing_enabled() != 0); break;
             case ACT_FULLSCREEN: swOn = settings.fullscreen; break;

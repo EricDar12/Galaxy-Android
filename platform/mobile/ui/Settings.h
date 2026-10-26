@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdint.h>
 #include <string>
 
 namespace mobile_ui {
@@ -105,6 +106,24 @@ struct Settings {
     float controllerDeadzone = 0.18f;
     float triggerThreshold = 0.40f;
     bool swapTriggersBumpers = false;
+    uint8_t customButtonActions[16] = {
+        1,  // BTN_SOUTH = ACTION_JUMP
+        3,  // BTN_EAST = ACTION_SHOOT_CANCEL
+        2,  // BTN_WEST = ACTION_SPIN
+        2,  // BTN_NORTH = ACTION_SPIN
+        5,  // BTN_L1 = ACTION_CAMERA_SNAP
+        6,  // BTN_R1 = ACTION_POINTER_RECENTER
+        4,  // BTN_L2 = ACTION_CROUCH_GROUNDPOUND
+        3,  // BTN_R2 = ACTION_SHOOT_CANCEL
+        4,  // BTN_THUMBL = ACTION_CROUCH_GROUNDPOUND
+        6,  // BTN_THUMBR = ACTION_POINTER_RECENTER
+        7,  // BTN_START = ACTION_PAUSE
+        7,  // BTN_SELECT = ACTION_PAUSE
+        8,  // BTN_DPAD_UP = ACTION_DPAD_UP
+        9,  // BTN_DPAD_DOWN = ACTION_DPAD_DOWN
+        10, // BTN_DPAD_LEFT = ACTION_DPAD_LEFT
+        11  // BTN_DPAD_RIGHT = ACTION_DPAD_RIGHT
+    };
 
     void load(const std::string& path);
     void save(const std::string& path) const;

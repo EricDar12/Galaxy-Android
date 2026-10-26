@@ -97,6 +97,12 @@ int controller_mapping_is_pointer_recenter(ControllerAction action) {
 }
 
 float controller_mapping_apply_deadzone(float rawX, float rawY, float deadzone, float* outX, float* outY) {
+    if (!std::isfinite(rawX) || !std::isfinite(rawY) || !std::isfinite(deadzone)) {
+        if (outX) *outX = 0.0f;
+        if (outY) *outY = 0.0f;
+        return 0.0f;
+    }
+    deadzone = std::max(0.0f, std::min(0.95f, deadzone));
     float mag = std::sqrt(rawX * rawX + rawY * rawY);
     if (mag <= deadzone || mag <= 0.0001f) {
         if (outX) *outX = 0.0f;
@@ -104,8 +110,8 @@ float controller_mapping_apply_deadzone(float rawX, float rawY, float deadzone, 
         return 0.0f;
     }
     float norm = std::min(1.0f, (mag - deadzone) / (1.0f - deadzone));
-    if (outX) *outX = (rawX / mag) * norm;
-    if (outY) *outY = (rawY / mag) * norm;
+    if (outX) *outX = std::max(-1.0f, std::min(1.0f, (rawX / mag) * norm));
+    if (outY) *outY = std::max(-1.0f, std::min(1.0f, (rawY / mag) * norm));
     return norm;
 }
 
@@ -165,4 +171,19 @@ ControllerButton controller_mapping_from_android_key(int32_t keyCode) {
     default:
         return BTN_COUNT;
     }
+}
+
+int controller_mapping_set_action(ControllerMapping* mapping, ControllerButton button, ControllerAction action) {
+    if (!mapping || (int)button < 0 || button >= BTN_COUNT) return 0;
+    if ((int)action < 0 || action >= ACTION_COUNT) return 0;
+    mapping->buttonActions[button] = (uint8_t)action;
+    return 1;
+}
+
+int controller_mapping_is_valid_action(int action) {
+    return (action >= ACTION_NONE && action < ACTION_COUNT) ? 1 : 0;
+}
+
+int controller_mapping_is_valid_profile(int profile) {
+    return (profile >= CONTROLLER_PROFILE_STANDARD && profile < CONTROLLER_PROFILE_COUNT) ? 1 : 0;
 }

@@ -166,9 +166,12 @@ add_test(NAME vk_texture_staging COMMAND vk_texture_staging_test)
 add_executable(controller_mapping_test
   test_controller_mapping.cpp
   ${CMAKE_SOURCE_DIR}/platform/src/port/controller_mapping.cpp
+  ${CMAKE_SOURCE_DIR}/platform/mobile/input/GamepadInput.cpp
 )
 target_include_directories(controller_mapping_test PRIVATE
   ${CMAKE_SOURCE_DIR}/platform/include
+  ${CMAKE_SOURCE_DIR}/platform/src
+  ${CMAKE_SOURCE_DIR}/platform/mobile
 )
 add_test(NAME controller_mapping COMMAND controller_mapping_test)
 

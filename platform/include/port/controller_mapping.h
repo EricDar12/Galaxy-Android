@@ -68,6 +68,9 @@ int controller_mapping_is_spin(ControllerAction action);
 int controller_mapping_is_pointer_recenter(ControllerAction action);
 float controller_mapping_apply_deadzone(float rawX, float rawY, float deadzone, float* outX, float* outY);
 ControllerButton controller_mapping_from_android_key(int32_t keyCode);
+int controller_mapping_set_action(ControllerMapping* mapping, ControllerButton button, ControllerAction action);
+int controller_mapping_is_valid_action(int action);
+int controller_mapping_is_valid_profile(int profile);
 
 #ifdef __cplusplus
 }

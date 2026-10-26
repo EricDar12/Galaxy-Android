@@ -23,6 +23,11 @@ static const MenuRowDef kControlsRows[] = {
     {ACT_RELATIVE_POINTER, ROW_SWITCH, 50.0f, "Relative Pointer (Trackpad)", "Drag anywhere to steer pointer without obstructing view", 0, {}, 0.0f, 0.0f, 0.0f, nullptr},
     {ACT_FULL_TOUCH_MODE, ROW_SWITCH, 50.0f, "Full Touch Navigation", "Tap to jump/dialogue, flick to spin", 0, {}, 0.0f, 0.0f, 0.0f, nullptr},
     {ACT_HAPTICS, ROW_SWITCH, 50.0f, "Vibration Haptics", "Tactile feedback pulses on button presses", 0, {}, 0.0f, 0.0f, 0.0f, nullptr},
+    {ACT_SECTION_HEADER, ROW_SECTION, 36.0f, "PHYSICAL CONTROLLER & GAMEPAD", "Hardware mapping, calibration & triggers", 0, {}, 0.0f, 0.0f, 0.0f, nullptr},
+    {ACT_CONTROLLER_PROFILE, ROW_DROPDOWN, 50.0f, "Controller Profile", "Button layout preset", 4, {"Xbox / Standard", "Switch Pro", "GameCube", "Custom"}, 0.0f, 0.0f, 0.0f, nullptr},
+    {ACT_CONTROLLER_DEADZONE, ROW_SLIDER, 54.0f, "Analog Stick Deadzone", "Inner stick drift prevention radius", 0, {}, 0.05f, 0.40f, 0.01f, "%.0f%%"},
+    {ACT_TRIGGER_THRESHOLD, ROW_SLIDER, 54.0f, "Trigger Pull Threshold", "Analog trigger activation point", 0, {}, 0.10f, 0.80f, 0.05f, "%.0f%%"},
+    {ACT_SWAP_TRIGGERS_BUMPERS, ROW_SWITCH, 50.0f, "Swap Triggers & Bumpers", "Swap L1/L2 and R1/R2 functions", 0, {}, 0.0f, 0.0f, 0.0f, nullptr},
 };
 
 static const MenuRowDef kGraphicsRows[] = {

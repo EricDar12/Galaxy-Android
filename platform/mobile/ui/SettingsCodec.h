@@ -23,6 +23,24 @@ inline int roundedClamp(float value, int lo, int hi) {
 inline bool applySettingLine(Settings& s, const char* line) {
     if (!line) return false;
 
+    if (!strncmp(line, "custom_mapping=", 15)) {
+        const char* p = line + 15;
+        for (int i = 0; i < 16; i++) {
+            int act = 0;
+            int charsRead = 0;
+            if (sscanf(p, "%d%n", &act, &charsRead) >= 1) {
+                if (act >= 0 && act < 12) {
+                    s.customButtonActions[i] = (uint8_t)act;
+                }
+                p += charsRead;
+                if (*p == ',') p++;
+            } else {
+                break;
+            }
+        }
+        return true;
+    }
+
     char key[64] = {0};
     float value = 0.0f;
     if (sscanf(line, "%63[^=]=%f", key, &value) != 2) return false;
@@ -179,6 +197,14 @@ inline std::string serializeSettings(const Settings& s) {
     appendSetting(out, "controller_deadzone", s.controllerDeadzone, 2);
     appendSetting(out, "trigger_threshold", s.triggerThreshold, 2);
     appendSetting(out, "swap_triggers_bumpers", s.swapTriggersBumpers ? 1 : 0);
+
+    char customBuf[128];
+    int n = snprintf(customBuf, sizeof(customBuf), "custom_mapping=");
+    for (int i = 0; i < 16; i++) {
+        n += snprintf(customBuf + n, sizeof(customBuf) - n, "%u%s",
+                      (unsigned int)s.customButtonActions[i], (i == 15) ? "\n" : ",");
+    }
+    out += customBuf;
     return out;
 }
 

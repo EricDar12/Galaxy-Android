@@ -35,6 +35,9 @@ public:
     int screenHeight() const { return mScreenHeight; }
     android_app* androidApp() const { return mAndroid; }
 
+    void syncControllerSettings();
+    mobile_input::GamepadInput& gamepad() { return mGamepad; }
+
 private:
     MobileApp() = default;
 

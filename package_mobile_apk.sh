@@ -104,6 +104,8 @@ for root, _, files in os.walk('lib'):
         p = os.path.join(root, f).replace('\\', '/')
         c_type = zipfile.ZIP_STORED if f.endswith('.so') else zipfile.ZIP_DEFLATED
         z.write(p, p, compress_type=c_type)
+if os.path.exists('../classes.dex'):
+    z.write('../classes.dex', 'classes.dex', compress_type=zipfile.ZIP_DEFLATED)
 z.close()
 PY
   )

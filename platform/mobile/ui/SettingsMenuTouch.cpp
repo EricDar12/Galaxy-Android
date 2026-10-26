@@ -231,6 +231,7 @@ bool SettingsMenuHandler::handleTouch(const AInputEvent* event, int screenW, int
                         int curActive = 0;
                         switch (r.action) {
                         case ACT_JOYSTICK_MODE: curActive = settings.dynamicStick ? 0 : 1; break;
+                        case ACT_CONTROLLER_PROFILE: curActive = std::max(0, std::min(3, settings.controllerProfile)); break;
                         case ACT_RIGHT_STICK_MODE: curActive = (settings.rightStickMode == 1) ? 1 : 0; break;
                         case ACT_DPAD_SIDE: curActive = settings.dpadOnRight ? 1 : 0; break;
                         case ACT_RENDER_SCALE: curActive = std::max(0, std::min(3, settings.renderScale)); break;
