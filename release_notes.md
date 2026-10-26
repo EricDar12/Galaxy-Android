@@ -1,149 +1,62 @@
-# GalaxyAndroid v0.0.4-epsilon — Community Beta Tester Build
+# GalaxyAndroid v0.0.4 — Official Stable Release
 
-Pre-release beta tester build delivering hardened non-blocking asynchronous shader persistence, zero mid-draw frame stutter, elimination of Mali skybox z-fighting and lighting attenuation overflow, verified concurrency exclusivity, and 100% save data integrity.
-
-> [!IMPORTANT]
-> **Mandatory Requirement for Testers: Discord Membership**:
-> For all testers, it is necessary and mandatory to join our official Discord server to report issues, submit logs, discuss test builds, and receive real-time support:
-> - **Official Tester Discord**: [https://discord.gg/H3qdNWYu2](https://discord.gg/H3qdNWYu2)
->
-> *Notice: Bug reports and support requests must go through Discord or GitHub Issues. Do not send bug reports via email; emails are not monitored for technical support.*
-
----
-
-### Highlights & Engineering Improvements in v0.0.4-epsilon
-
-#### 1. Hardened Asynchronous Shader Persistence (Zero Mid-Draw Stutter)
-- **Eliminated Synchronous Flash I/O Pauses**: Render thread disk write stalls (20–50 ms) during runtime pipeline discovery are completely eliminated by offloading manifest persistence to a dedicated background worker thread with condition variables (`mCv`, `mDoneCv`).
-- **Strict Writer Exclusivity**: Replaced naive detached threads with a serialized worker queue. Concurrent synchronous and asynchronous save requests cannot race or corrupt `.tmp` manifests.
-- **Zero Dropped Snapshots & Coalescing**: Runtime discoveries arriving while a write is in progress are safely coalesced into an immediate subsequent pass, ensuring no keys are lost.
-- **Error Handling & Retry Durability**: Failed disk writes safely preserve unpersisted keys for immediate retry rather than falsely marking them saved.
-- **Coordinated Lifecycle Shutdown**: Explicit `shutdown()` guarantees all staged discoveries are flushed to disk and the background worker is cleanly joined before renderer teardown.
-
-#### 2. Graphics Correctness & Shading Fixes
-- **Skybox Depth Ordering & Atmosphere**: Removed non-VR depth overrides that caused far-plane z-fighting. Restored smooth atmospheric shell gradients.
-- **Mali Lighting Attenuation**: Added lower-bound guards and clamping to distance attenuation, eliminating character blowout artifacts on Mali-G68.
-- **EFB Copy-Clear Semantics**: Restricted color attachment clears to `colorUpd` state, preventing water surface flickers.
-
----
-
-# GalaxyAndroid v0.0.4-delta — Community Beta Tester Build
-
-# GalaxyAndroid v0.0.4-gamma — Community Beta Tester Build
-
-Beta tester release delivering the verified Vulkan shader inventory and graphics pipeline prewarming architecture, canonical `PipelineKey` unification, multi-stage startup compilation, durability and corruption recovery, and texture staging safety.
-
-> [!IMPORTANT]
-> **Mandatory Requirement for Testers: Discord Membership**:
-> For all testers, it is necessary and mandatory to join our official Discord server to report issues, submit logs, discuss test builds, and receive real-time support:
-> - **Official Tester Discord**: [https://discord.gg/H3qdNWYu2](https://discord.gg/H3qdNWYu2)
-> 
-> *Notice: Bug reports and support requests must go through Discord or GitHub Issues. Do not send bug reports via email; emails are not monitored for technical support.*
-
----
-
-### Highlights & Engineering Improvements in v0.0.4-gamma
-
-#### 1. Canonical Vulkan Pipeline-Key Construction & Unification
-- **Zero Runtime Key Drift**: Eliminated divergent, ad-hoc bit shifting by introducing `DecodedPipelineKey`, `encodePipelineKey()`, and `decodePipelineKey()`.
-- **Unified Pipeline Creation**: Runtime `getPipeline()` and offline `prewarmExactPipeline()` now decode from the identical `PipelineKey` representation, ensuring prewarmed pipelines match runtime lookups bit-for-bit with 0 duplicate allocations.
-- **Topology & Culling Bit Disambiguation**: Resolved bit conflicts where topology indices previously overlapped with culling face bitmasks.
-
-#### 2. Pipeline Prewarm Correctness & False-Success Elimination
-- **Explicit Prewarm Result Accounting**: Introduced `PrewarmResult` (`Reused`, `Created`, `SpirvUnavailable`, `CompilationPending`, `PlaceholderReturned`, `CreationFailed`, `UnsupportedState`).
-- **Placeholder Fallback Rejection**: Placeholder stubs returned during in-flight shader compilation are strictly prohibited from counting as successfully created game pipelines.
-- **Measurable Startup Readiness**: `verifyStartupReadiness()` audits essential pipeline stubs and title screen variants, ensuring all required graphics pipelines are published on the Vulkan device before allowing gameplay to boot.
-
-#### 3. Two-Stage Compilation & Loading Pipeline
-- **Stage A (Parallel SPIR-V Compilation)**: Compiles missing bytecode in parallel using bounded worker concurrency (up to 4 hardware threads) during `initCaches()`.
-- **Stage B (Vulkan Graphics Pipeline Prewarm)**: Warms the active Vulkan device and render pass before gameplay commences.
-- **Phase Timing & Diagnostics**: Accurately records Stage A and Stage B elapsed milliseconds, reporting cache hits, fresh compiles, and pipeline reuse.
-
-#### 4. Offline Material Discovery & Manifest Cooker
-- **Asset Material Cooker**: Introduced `tools/cook/generate_shader_manifest.py` to parse J3D `MAT3` chunks from models (`.bmd`, `.bdl`) and archives into versioned `galaxy_shader_manifest.bin`.
-- **Explicit Gap Diagnostics**: When running without cooked manifests, `scanAssetDirectory()` records unparsed archives as explicit gaps rather than claiming false full-game coverage.
-
-#### 5. Durable Binary Cache Serialization & Stale Invalidation
-- **Field-by-Field Encoding**: Replaced fragile in-memory C++ struct dumping with stable binary serialization (Magic: `0x55535450`, Schema: `2`, Build: `20261019`).
-- **Data Integrity & Corruption Recovery**: Added FNV1a-32 checksums, strict 512-byte string bounds checks (resolving reader desynchronization on corrupt records), and atomic `.tmp` replacement.
-- **Active Invalidation**: Active `invalidateIfStale()` purging stale binary caches whenever shader generator versions change.
-
-#### 6. Texture Upload Bounds & Mip-Chain Safety
-- **Extent & Memory Fit Validation**: Strict bounds checks ensuring all `VkBufferImageCopy` offsets and extents fit inside allocated staging buffers.
-- **Failure Cleanup**: Immediate destruction of partially allocated Vulkan handles upon creation/mapping failure.
-- **Deferred Destruction**: Staging buffers are held until `waitInFlightSubmissions()` confirms GPU fence completion.
-
----
-
-# GalaxyAndroid v0.0.4-alpha — Community Tester Build
-
-Alpha test release introducing the modular sub-300 LOC Vulkan translation architecture, THP cutscene video crash guards, full touch control optimizations, and community tester feedback channels.
-
-> [!IMPORTANT]
-> **Mandatory Requirement for Testers: Discord Membership**:
-> For all testers, it is necessary and mandatory to join our official Discord server to report issues, submit logs, discuss test builds, and receive real-time support:
-> - **Official Tester Discord**: [https://discord.gg/H3qdNWYu2](https://discord.gg/H3qdNWYu2)
-> 
-> *Notice: Bug reports and support requests must go through Discord or GitHub Issues. Do not send bug reports via email; emails are not monitored for technical support.*
-
----
-
-### Highlights & Engineering Improvements in v0.0.4-alpha
-- **Mandatory Tester Discord & Feedback Hub**: Added dedicated in-app links and tester notices requiring all alpha testers to join [https://discord.gg/H3qdNWYu2](https://discord.gg/H3qdNWYu2) for reporting issues, uploading crash logs, discussing performance across device chipsets, and receiving test updates.
-- **Hardware Translation Architecture Modularization**: Split the monolithic Vulkan renderer (`vk_renderer.cpp`, 3,967 LOC) into 21 dedicated single-responsibility translation units in `platform/src/gx/vk/` (all strictly <= 276 LOC).
-- **THP Movie Cutscene Crash Resolution**: Eliminated crashes on missing movie files or corrupt audio/video chunks with memory bounds validation, clamp guards, and silent fallbacks.
-- **Star Pointer Edge Tracking & Clamping**: Extended Star Pointer viewport tracking to 100% of physical display bounds on 20:9 and ultrawide screens.
-- **Natural 360 Camera Controls**: Corrected inverted right-stick and touch camera orbit behavior for seamless gamepad and touch navigation.
-- **In-App Tester Notices & One-Tap Discord Access**: Integrated interactive Discord tester banners into the startup setup launcher and in-game settings drawer.
-
----
-
-# GalaxyAndroid v0.0.3a — Ultrawide Fullscreen & 360 Camera Precision Patch
-
-Hotfix release delivering true edge-to-edge ultrawide rendering, complete removal of 16:9 2D pillarboxing in fullscreen mode, natural 360 camera touch swiping, and full-screen Star Pointer tracking.
-
----
-
-### Key Improvements in v0.0.3a
-- **True Ultrawide Fullscreen HUD & Effects**: Removed legacy 16:9 safe zone clamping (`hudSafe`) in Vulkan and OpenGL ES renderers when fullscreen mode is active (`port_is_fullscreen_aspect()`). Title screen bloom/glare, cinematic wipes, and in-game HUD elements now stretch and position properly across modern 19.5:9, 20:9, and 21:9 displays without black bars or cut-off rectangles.
-- **Full-Screen Star Pointer Tracking**: Updated pointer viewport calculations so pointer coordinate normalization spans the entire screen in fullscreen mode. The Star Pointer cursor now reaches the far left and right edges seamlessly.
-- **Natural 360 Camera Swipe Direction**: Inverted horizontal camera swipe input (`CAMERA_SWIPE` and gamepad right stick) so swiping right turns the camera to the right and swiping left turns it to the left.
-- **Smooth Radial Right Analog Deadzone**: Replaced abrupt deadzone cutoffs with smooth radial deadzones and proportional velocity scaling for precise Star Pointer control on external gamepads.
-- **In-Game Settings Drawer Touch Scrolling**: Fixed touch drag gesture propagation in the in-game settings menu drawer so all graphics, audio, and gameplay options can be smoothly scrolled on touch screens.
-
----
-
-# GalaxyAndroid v0.0.4 — Zero-Stutter, Low-End Hardware Engine & Dual-Stick Update
-
-Major performance and stability release eliminating all Vulkan frame stuttering, introducing zero-syscall persistent memory mapping, on-chip TBDR depth discard, CPU performance core affinity, permanent first-boot shader precompilation, and fully customizable dual-stick controls.
+The landmark **v0.0.4** release of **Galaxy Android** delivers a 100% native ARM64 port executing compiled C++ game logic directly on Android hardware with zero emulation overhead. This definitive release introduces a Pure Vulkan 1.0 rendering architecture, complete elimination of mid-draw frame stutter via asynchronous shader persistence, native physical controller mapping and trigger calibration, wire-hardened co-op netplay, ARM Mali rendering parity, and an overhauled glassmorphic launcher and settings drawer.
 
 ---
 
 ### Highlights & Engineering Improvements in v0.0.4
 
-#### 1. Complete Frame Stutter & Judder Elimination
-- **Pipelined Asynchronous Presentation**: Decoupled offscreen rendering and swapchain presentation using a dedicated presentation command buffer (`mPresentCommandBuffer`) and GPU-side semaphore (`mRenderToPresentSem`). Eliminates all synchronous CPU fence waits between `render()` and `present()`.
-- **100% Non-Blocking Asynchronous Texture Uploads**: Completely re-engineered `uploadTextures()` to record buffer-to-image copies directly into the active frame's command buffer with deferred staging buffer deletion. Eliminates all `vkQueueWaitIdle` stalls during galaxy transitions and asset streaming.
-- **Phase-Locked VI Retrace Clock Synchronization**: Phase-locked the Wii engine's internal Video Interface retrace tick directly to physical Android display flips via `port_vi_retrace()`. Eliminates clock drift and beat frequencies that previously caused alternating 16.6ms and 33.3ms frame judder.
-- **Render Thread Priority Elevation**: Added `setpriority(PRIO_PROCESS, 0, -10)` to prevent the Android OS thread scheduler from preempting or throttling the rendering loop during background system tasks.
+#### 1. Pure Vulkan 1.0 Architecture & Frame Pacing
+- **Strict Pure Vulkan 1.0 Compliance**: Engine rendering strictly targets core Vulkan 1.0 without Vulkan 1.1+ extension dependencies, guaranteeing rock-solid stability and universal compatibility across Qualcomm Adreno, ARM Mali, and PowerVR chipsets.
+- **Pipelined Asynchronous Presentation**: Decoupled offscreen scene rendering and swapchain presentation using a dedicated presentation command buffer (`mPresentCommandBuffer`) and GPU-side semaphore (`mRenderToPresentSem`), eliminating CPU fence stalls between rendering and display flips.
+- **Zero-Syscall Persistent Memory Mapping**: All dynamic host-visible frame resources (`vbo`, `ibo`, `rowBuf`, `recBuf`, `stBuf`, `vtxRecBuf`, `eyeUbo`, and `uiVbo`) are persistently mapped upon allocation. Replaces per-frame `vkMapMemory` and `vkUnmapMemory` Linux kernel system calls with direct, non-blocking `memcpy()` operations.
+- **On-Chip TBDR Depth Discard**: Configured depth/stencil attachments in EFB offscreen render passes with `VK_ATTACHMENT_STORE_OP_DONT_CARE`. Allows mobile tile-based GPUs to discard depth on-chip in fast SRAM/GMEM, slashing external DRAM memory bus bandwidth by hundreds of megabytes per second.
+- **Bounded Batched Texture Staging & Suballocation**: Implemented a 128 MiB batch staging suballocator with automatic bounded chunking, Vulkan 1.0 4-byte offset alignment, and guaranteed leak-free cleanup of partial handles on allocation failure.
+- **Phase-Locked VI Retrace Clock**: Phase-locked the Wii engine's internal Video Interface retrace tick directly to physical Android display flips via `port_vi_retrace()`, eliminating clock drift and micro-stutter.
 
-#### 2. Low-End & Wii-Tier Hardware Optimizations
-- **Zero-Syscall Persistent Memory Mapping**: All dynamic host-visible frame buffers (`vbo`, `ibo`, `rowBuf`, `recBuf`, `stBuf`, `vtxRecBuf`, `eyeUbo`, and `uiVbo`) in `FrameResource` are now persistently mapped once upon allocation. Replaces all per-frame `vkMapMemory` and `vkUnmapMemory` Linux kernel system calls with direct, non-blocking `memcpy()` operations.
-- **TBDR Tile Memory Optimization (Zero Depth Writeback)**: Configured depth/stencil attachments in EFB offscreen render passes with `VK_ATTACHMENT_STORE_OP_DONT_CARE`. Allows mobile GPUs (Qualcomm Adreno, ARM Mali, PowerVR) to discard depth on-chip in fast SRAM/GMEM, eliminating hundreds of megabytes of external DRAM bus bandwidth per second.
-- **CPU big.LITTLE Performance Core Affinity Pinning**: Implemented `pinThreadToPerformanceCores()` via `sched_setaffinity()`, locking the game engine and Vulkan render threads to Cores 4 through 7 (high-performance Cortex-A7x/X cluster) to prevent scheduler migration to weak A55 power-saver cores.
-- **First-Boot Shader Precompilation & Permanent On-Disk Cache**: Implemented `prewarmCommonShaders()` to pre-compile common Galaxy TEV combinations, lighting modes, and HUD variants into binary SPIR-V during initial engine initialization. Saved permanently to `vk_shaders.bin` to ensure 0 ms shader compile overhead during gameplay.
-- **Vulkan Pipeline Cache Serialization**: Automatically commits driver pipeline state objects to `vk_pipeline_cache.bin` on `APP_CMD_PAUSE`, backgrounding, and engine shutdown.
-- **Hardware-Accurate 480p Mode**: Integrated dynamic render scaling with battery-saver clamping into the Vulkan backend (480p, 720p, 1080p, 1440p) to reduce pixel fillrate by 80% on entry-level chipsets.
+#### 2. Zero-Stutter Asynchronous Shader Persistence
+- **Eliminated Synchronous Disk I/O Pauses**: Render thread disk write stalls (20–50 ms) during runtime pipeline discovery are completely eliminated by offloading manifest persistence to a dedicated background worker thread with condition variables (`mCv`, `mDoneCv`).
+- **Strict Writer Exclusivity & Coalescing**: Serialized background queue prevents concurrent write races, while runtime discoveries arriving during an active write are safely coalesced into an immediate subsequent pass with zero dropped snapshots.
+- **Two-Stage Startup Compilation**:
+  - **Stage A**: Parallel SPIR-V compilation across up to 4 hardware threads during cache initialization.
+  - **Stage B**: Device and render pass prewarming before gameplay boots to prevent mid-game compilation hitches.
+- **Canonical `PipelineKey` Unification**: Unified pipeline key construction across runtime `getPipeline()` and offline `prewarmExactPipeline()`, eliminating key drift and duplicate allocations.
+- **Durable Binary Manifests**: Added FNV1a-32 checksums, schema versioning (Schema 2, Build 20261019), and atomic `.tmp` replacement protecting against storage corruption.
 
-#### 3. Enhanced Touch Controls & Dual-Stick Navigation
-- **Fully Repositionable 2nd Joystick (Star Pointer)**: Added full drag-and-drop customization for the Star Pointer joystick. Can be placed anywhere on screen or positioned above the action buttons via the interactive Touch Edit mode.
-- **Dual Joystick Sensitivity Multipliers**: Independent sensitivity controls in the Settings drawer:
-  - Movement Joystick Sensitivity: 75%, 100%, 125%, 150%
-  - Star / Camera Joystick Sensitivity: 50%, 75%, 100%, 150%, 200%
-  - Saved persistently to `touch_settings.ini`.
+#### 3. ARM Mali & Graphics Correctness Parity
+- **Mali Distance Attenuation Clamping**: Clamped lower bounds in lighting attenuation equations, completely eliminating character blowout and glowing cyan/white Mario/NPC rendering on ARM Mali-G68.
+- **Skybox Depth Ordering & Atmosphere**: Removed non-VR depth overrides that caused far-plane z-fighting and sun clipping. Restored smooth atmospheric shell gradients.
+- **EFB Copy-Clear Semantics**: Restricted color attachment clears to `colorUpd` state, preventing water surface and specular reflections from flickering.
+- **Compositor Flicker Fix**: Clamped swapchain presentation fragment alpha to opaque 1.0, preventing Android SurfaceFlinger from treating frames as translucent.
 
-#### 4. Complete Issue Resolution
-- 100% of community-reported GitHub issues resolved and closed (#51 through #71), covering memory reservation fallbacks, Mali GPU flickering, crash handlers, Bee Mario flight mechanics, and SD card path resolution.
+#### 4. Native Physical Gamepad Mapping & Calibration
+- **Native Controller Presets**: Integrated automatic detection and presets for Xbox (One / Series X|S), PlayStation (DualShock 4 / DualSense), Nintendo Switch Pro, and Generic HID controllers.
+- **Analog Trigger Calibration**: Real-time calibration for L2/R2 analog triggers detecting resting baseline and actuation thresholds, resolving dead-trigger issues on mobile telescopic controllers.
+- **Custom Deadzones & Sensitivity Curves**: Independent analog stick deadzones, camera orbit sensitivity multipliers, and smooth radial velocity curves for Star Pointer control.
+- **Simultaneous Input Handling**: Seamlessly switch between physical controller and touch controls on the fly without input dropouts or mode switching lag.
+
+#### 5. Overhauled Touch Controls & Dual-Stick Navigation
+- **Exclusive Multi-Touch Pointer Tracking**: Stateful pointer tracking engine supporting up to 10 concurrent fingers with mutually-exclusive Euclidean distance matching, eliminating ghost tap injections and double-button activations.
+- **Repositionable 2nd Joystick (Star Pointer)**: Full drag-and-drop customization for the Star Pointer joystick. Can be placed anywhere on screen or positioned above the action buttons via the interactive Touch Edit mode.
+- **Independent Sensitivity Multipliers**: Dedicated controls in the Settings drawer for movement and camera/star joystick sensitivity.
+
+#### 6. Hardened Local / Co-Op Netplay Wire Protocol
+- **Strict Little-Endian Wire Protocol**: Standardized all network packet encoding and decoding (`netReadLe*`, `netWriteLe*`) across little-endian wire layouts for cross-architecture safety.
+- **Strict Network Packet Validation**: Enforced payload bounds, enum range verification, and bounded null-terminated strings for `PKT_CONNECT_REQ`, `PKT_CONNECT_ACK`, `PKT_BEACON_BROADCAST`, and `PKT_EVENT`. Malformed packets are safely dropped without altering connection state or crashing.
+- **Loopback & Negative Test Suite**: Verified network integrity and packet framing across 14 host tests and loopback fixtures.
+
+#### 7. Modern Glassmorphic Launcher & Settings Drawer
+- **Cosmic Glassmorphic Launcher**: Overhauled startup UI with frosted glass blur cards, neon accent badges, integrated GPU driver manager, and intuitive disc installation.
+- **3-Tab Material 3 Settings Drawer**:
+  - **General**: Resolution scaling (480p to 1440p), refresh rate pacing (60/90/120/144Hz), battery saver mode, and controller mappings.
+  - **Mod Manager**: Toggle NVIDIA Shield 1080p remastered textures, 60 FPS cinematics, analog response curves, and custom Riivolution XML mods.
+  - **Save Anywhere**: Instant one-tap state capture and scene respawn with 4-slot NAND snapshotting and Dolphin Wii save compatibility.
+
+#### 8. Engine Stability, Benchmarking & Code Quality
+- **Accurate Telemetry Pacing**: Corrected frame interval calculation to measure true frame period (~16.6 ms at 60 FPS) rather than CPU idle gaps.
+- **Reproducible Benchmark Suite**: Standardized automated benchmark runner with per-window statistical aggregation and resilient log parsing.
+- **Memory & Lifecycle Safety**: Guarded camera target holders against null dereferences during dome transitions, eliminated MEM1 cutscene leaks, and added safe fallback stage reloading.
+- **Strict 300 LOC Modular Architecture**: 100% of maintained source files strictly comply with <= 300 physical lines of code (`python tools/check_loc.py`).
 
 ---
 
