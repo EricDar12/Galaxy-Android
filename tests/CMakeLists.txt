@@ -138,6 +138,19 @@ if(NOT WIN32)
 endif()
 add_test(NAME wstring_format COMMAND wstring_format_test)
 
+add_executable(netplay_test
+  test_netplay.cpp
+  ${CMAKE_SOURCE_DIR}/platform/src/net/NetSocket.cpp
+)
+target_include_directories(netplay_test PRIVATE
+  ${CMAKE_SOURCE_DIR}/platform/include
+  ${CMAKE_SOURCE_DIR}/platform/src
+)
+if(WIN32)
+  target_link_libraries(netplay_test PRIVATE ws2_32)
+endif()
+add_test(NAME netplay COMMAND netplay_test)
+
 # Run under CTest without depending on which libstdc++ happens to be first on
 # PATH; an older MSYS2 runtime can lack symbols the compiler emits.
 get_property(_all_test_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
