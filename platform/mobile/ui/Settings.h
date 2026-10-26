@@ -1,0 +1,112 @@
+#pragma once
+
+#include <string>
+
+namespace mobile_ui {
+
+// Canonical selectable speed contract: persisted index i selects
+// kGameSpeedMultipliers[i - 1]. These are the only speeds the settings UI
+// offers; 0.5x exists only as an engine timing edge case, not a saved option.
+constexpr int kGameSpeedOptionCount = 5;
+constexpr float kGameSpeedMultipliers[kGameSpeedOptionCount] = {1.0f, 1.5f, 2.0f, 3.0f, 4.0f};
+
+inline int gameSpeedClampIndex(int index) {
+    return index < 1 ? 1 : (index > kGameSpeedOptionCount ? kGameSpeedOptionCount : index);
+}
+
+inline float gameSpeedMultiplier(int index) {
+    return kGameSpeedMultipliers[gameSpeedClampIndex(index) - 1];
+}
+
+// The menu slider reports a continuous multiplier; snap it to the nearest
+// canonical option, preferring the faster option on an exact midpoint.
+inline int gameSpeedIndexForMultiplier(float multiplier) {
+    int best = 1;
+    float bestDelta = multiplier - kGameSpeedMultipliers[0];
+    if (bestDelta < 0.0f) bestDelta = -bestDelta;
+    for (int i = 1; i < kGameSpeedOptionCount; ++i) {
+        float delta = multiplier - kGameSpeedMultipliers[i];
+        if (delta < 0.0f) delta = -delta;
+        if (delta <= bestDelta) {
+            best = i + 1;
+            bestDelta = delta;
+        }
+    }
+    return best;
+}
+
+struct Settings {
+    bool showControls = true;
+    bool fullscreen = true;
+    float opacity = 0.65f;
+    float scale = 1.0f;
+    bool dynamicStick = true;
+    float stickOffsetX = 0.0f;
+    float stickOffsetY = 0.0f;
+    float buttonOffsetX = 0.0f;
+    float buttonOffsetY = 0.0f;
+    float btnAOffsetX = 0.0f;
+    float btnAOffsetY = 0.0f;
+    float btnBOffsetX = 0.0f;
+    float btnBOffsetY = 0.0f;
+    float btnZOffsetX = 0.0f;
+    float btnZOffsetY = 0.0f;
+    float btnSpinOffsetX = 0.0f;
+    float btnSpinOffsetY = 0.0f;
+    float starStickOffsetX = 0.0f;
+    float starStickOffsetY = 0.0f;
+    bool showDpad = true;
+    bool dpadOnRight = false;
+    float dpadOffsetX = 0.0f;
+    float dpadOffsetY = 0.0f;
+
+    // NVIDIA Shield and Remaster Mods
+    bool modShieldTextures = true;
+    bool modShieldCutscenes = true;
+    bool modShieldControls = true;
+    bool modClassicGamepadUI = true;
+    bool modRiivolution = true;
+
+    // Advanced Gameplay Mods
+    bool modFly = false;
+    bool modSkipCutscenes = false;
+    bool modInfiniteHealth = false;
+    bool modInfiniteLives = false;
+    bool modInfiniteStarBits = false;
+    bool speedrunHud = false;
+
+    // System Settings
+    int gameSpeed = 1;
+    int languageChoice = 0;
+    int renderScale = 0;
+    bool haptics = false;
+    int targetFps = 60;
+    int preferredRefreshRate = 60;
+    bool adaptiveFps = true;
+    bool batterySaver = false;
+    bool gyroAiming = false;
+    bool gyroInvertX = false;
+    bool gyroInvertY = false;
+
+    bool starStick = false;
+    float stickSensitivity = 1.0f;
+    float starStickSensitivity = 1.0f;
+    int rightStickMode = 0;
+    bool touchCamera = true;
+
+    bool fullTouchMode = true;
+    int perfHudMode = 0;
+    int graphicsBackend = 1;
+    bool relativePointer = false;
+    int screenOrientationChoice = 0;
+
+    void load(const std::string& path);
+    void save(const std::string& path) const;
+};
+
+// Startup restores the persisted display mode, not the pacing target.
+inline int startupDisplayRefreshRate(const Settings& settings) {
+    return settings.batterySaver ? 30 : settings.preferredRefreshRate;
+}
+
+}  // namespace mobile_ui

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Deep Cosmic Glass Palette -->
+    <color name="bg_dark">#090814</color>
+    <color name="bg_cosmic_deep">#06050E</color>
+    <color name="bg_cosmic_light">#161033</color>
+
+    <!-- Glassmorphic Surface Acrylic Fills -->
+    <color name="surface_glass">#1F193D</color>
+    <color name="surface_glass_translucent">#D9181333</color>
+    <color name="surface_glass_accent">#E6251E4E</color>
+    <color name="surface_glass_card">#CC1B1638</color>
+    <color name="surface_glass_border">#3D2F66</color>
+    <color name="surface_glass_highlight">#6C52B0</color>
+
+    <!-- Vibrant Cosmic Accents -->
+    <color name="primary_accent">#38BDF8</color>
+    <color name="primary_accent_hover">#0EA5E9</color>
+    <color name="cyan_glow">#00E5FF</color>
+    <color name="starlight_gold">#FACC15</color>
+    <color name="purple_accent">#A855F7</color>
+    <color name="purple_glow">#C084FC</color>
+    <color name="cosmic_pink">#EC4899</color>
+    <color name="success_green">#10B981</color>
+    <color name="success_emerald">#34D399</color>
+    <color name="warning_amber">#F59E0B</color>
+    <color name="error_red">#F43F5E</color>
+
+    <!-- Typography -->
+    <color name="text_primary">#F8FAFC</color>
+    <color name="text_secondary">#CBD5E1</color>
+    <color name="text_muted">#8492A6</color>
+
+    <!-- Terminal Console Log -->
+    <color name="log_bg">#B3080712</color>
+    <color name="log_border">#2C2248</color>
+    <color name="log_text">#6EE7B7</color>
+</resources>

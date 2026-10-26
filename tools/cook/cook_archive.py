@@ -1,0 +1,81 @@
+import os
+import collections
+import rarc_swap
+import collision
+import dol_data
+import bcsv
+from cook import cook_blob, is_converted_kind, yaz0_decompress
+
+def cook_rarc(data, stats, replace=None):
+    """Converts a (decompressed, big-endian) RARC; nested compressed files that
+    need conversion are decompressed, converted and stored uncompressed.
+    replace: {path: big-endian bytes} to convert in place of those files."""
+    def cook_file(path, blob, flags):
+        if replace and path in replace:
+            stats['collision-from-model'] += 1
+            return (cook_blob(path, bytearray(replace[path]), stats), flags & ~(rarc_swap.FLAG_COMPRESSED | rarc_swap.FLAG_YAZ0))
+        if not flags & rarc_swap.FLAG_COMPRESSED:
+            return cook_blob(path, blob, stats)
+        if not flags & rarc_swap.FLAG_YAZ0 or bytes(blob[:4]) != b'Yaz0':
+            stats['nested-yay0-kept'] += 1
+            return None
+        inner = bytearray(yaz0_decompress(bytes(blob)))
+        plain = flags & ~(rarc_swap.FLAG_COMPRESSED | rarc_swap.FLAG_YAZ0)
+        if inner[:4] == b'RARC':
+            stats['nested-rarc'] += 1
+            return (cook_rarc(inner, stats), plain)
+        before = collections.Counter(stats)
+        cooked = cook_blob(path, inner, stats)
+        if is_converted_kind(before, stats):
+            stats['nested-decompressed'] += 1
+            return (cooked, plain)
+        stats['nested-compressed-kept'] += 1
+        return None
+
+    return rarc_swap.swap_rarc(data, cook_file)
+
+
+def cook_archive(src, dst, stats, notes):
+    with open(src, 'rb') as fh:
+        raw = fh.read()
+    data = bytearray(yaz0_decompress(raw))
+    if data[:4] == b'AA_<':
+        return cook_blob(src.replace('\\', '/'), data, stats)
+    if data[:4] != b'RARC':
+        notes.append('%s: not a RARC archive (%r), copied decompressed' % (src, bytes(data[:4])))
+        return data
+    # Planets whose collision is rebuilt from their model (collision.py).
+    replace = None
+    rel = src.replace('\\', '/')
+    for arc, model in collision.FROM_MODEL.items():
+        if rel.endswith('/' + arc):
+            files = {path: bytes(data[off:off + size]) for _, path, flags, off, size in rarc_swap.entries(data)
+                     if not flags & rarc_swap.FLAG_COMPRESSED}
+            replace = collision.rebuild(files, model)
+    return cook_rarc(data, stats, replace)
+
+
+def cook_dol_data(data_dir, out_dir):
+    """Writes the data main.dol holds (dol_data.py) to <out>/sys; returns the
+    errors."""
+    path = os.path.join(data_dir, 'sys', 'main.dol')
+    if not os.path.isfile(path):
+        return ['%s is missing: extract the whole disc (its sys/ and files/ folders)' % path]
+    with open(path, 'rb') as fh:
+        dol = fh.read()
+    out = {}
+    archive = dol_data.find_error_archive(dol)
+    if archive:
+        out['ErrorMessageArchive.arc'] = cook_rarc(bytearray(archive), collections.Counter())
+    for name in dol_data.TABLES:
+        table = dol_data.find_table(dol, name)
+        if table:
+            table = bytearray(table)
+            bcsv.swap(table)
+            out[name + '.bcsv'] = table
+    for name, data in out.items():
+        with open(os.path.join(out_dir, 'sys', name), 'wb') as fh:
+            fh.write(data)
+    found = len(out) == 1 + len(dol_data.TABLES)
+    print('[Engine] System tables extracted from main.dol: %s' % ', '.join(out.keys()))
+    return [] if found else ['%s: the error message archive or a table was not found (not Super Mario Galaxy?)' % path]

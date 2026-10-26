@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.openport.galaxyandroid"
+    android:versionCode="15"
+    android:versionName="0.0.4-epsilon"
+    android:installLocation="auto">
+
+    <uses-sdk android:minSdkVersion="28" android:targetSdkVersion="34" />
+
+    <uses-feature android:name="android.hardware.vulkan.version" android:version="0x400000" android:required="true" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.hardware.gamepad" android:required="false" />
+
+    <!-- Game data files & saves access -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- Production variant: android:debuggable="false" by construction.  Android
+         ignores lib/<abi>/wrap.sh in a non-debuggable app, so there is no pre-ART
+         reservation here; libgame reserves the 32-bit guest window after ART has
+         started and aborts instead of overwriting an existing mapping (validated
+         on one RMX3395 on 2026-10-25, see docs/TECHNICAL.md).
+         extractNativeLibs="true" is kept so the launcher and NativeActivity load
+         the same extracted libraries the tester channel exercises. -->
+    <application
+        android:label="Galaxy Android"
+        android:icon="@mipmap/ic_launcher"
+        android:banner="@drawable/banner"
+        android:theme="@style/Theme.GalaxyAndroid"
+        android:hasCode="true"
+        android:debuggable="false"
+        android:extractNativeLibs="true"
+        android:allowBackup="false"
+        android:requestLegacyExternalStorage="true">
+
+        <!-- Launcher & In-App Setup Activity -->
+        <activity
+            android:name="com.openport.galaxyandroid.MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:screenOrientation="sensorLandscape">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Native Game Engine Activity.  Only MainActivity (the launcher) may
+             start this; other apps must not be able to boot into the engine. -->
+        <activity
+            android:name="com.openport.galaxyandroid.GameActivity"
+            android:exported="false"
+            android:excludeFromRecents="false"
+            android:launchMode="singleTask"
+            android:screenOrientation="sensorLandscape"
+            android:resizeableActivity="false"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
+            android:configChanges="density|keyboard|keyboardHidden|navigation|orientation|screenLayout|screenSize|uiMode">
+            <meta-data android:name="android.app.lib_name" android:value="main" />
+        </activity>
+    </application>
+</manifest>

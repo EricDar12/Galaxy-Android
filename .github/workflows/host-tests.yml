@@ -1,0 +1,69 @@
+# Linux-only checks that the Windows development host cannot run: real mmap
+# reservation collisions/rollback and POSIX save/signing cleanup. Every action
+# is pinned to a commit SHA; bump the SHA and the "# vN" comment together.
+name: Host Tests (Linux)
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host-tests:
+    name: Linux host test suite
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Build Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build
+
+      - name: Source policy checks
+        run: |
+          python3 tools/check_loc.py
+          python3 tools/check_include_case.py
+          for script in $(git ls-files '*.sh'); do bash -n "$script"; done
+
+      - name: Python test suites
+        run: |
+          python3 -m unittest discover -s tools/tests -p 'test_*.py' -v
+          python3 -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Build and run host native tests
+        run: |
+          cmake -S . -B build-host -G Ninja -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build-host --parallel \
+            --target dvd_fst_test extraction_security_test wii_extraction_limits_test \
+                     guest_memory_test guest_reserve_linux_test timing_pacing_test \
+                     settings_persistence_test thp_bounds_test heap_alignment_test \
+                     save_sync_test dolphin_converter_test wstring_format_test
+          ctest --test-dir build-host --output-on-failure
+
+      - name: Reservation tests under UBSan
+        env:
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          cmake -S . -B build-ubsan -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_FLAGS="-fsanitize=undefined -fno-sanitize-recover=all" \
+            -DCMAKE_CXX_FLAGS="-fsanitize=undefined -fno-sanitize-recover=all" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=undefined"
+          cmake --build build-ubsan --target guest_reserve_linux_test
+          ./build-ubsan/tests/guest_reserve_linux_test

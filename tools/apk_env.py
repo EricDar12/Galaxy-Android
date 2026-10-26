@@ -1,0 +1,294 @@
+import atexit
+import base64
+import glob
+import os
+import re
+import shutil
+import subprocess
+import tempfile
+import xml.etree.ElementTree as ET
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+SDK = os.environ.get("ANDROID_HOME") or os.environ.get("ANDROID_SDK_ROOT")
+if not SDK or not os.path.isdir(SDK):
+    if os.path.isdir(r"C:\Android\Sdk"):
+        SDK = r"C:\Android\Sdk"
+    else:
+        SDK = os.path.expandvars(r"%LOCALAPPDATA%\Android\Sdk")
+
+bt_parent = os.path.join(SDK, "build-tools") if SDK else ""
+BUILD_TOOLS_DIR = ""
+if os.path.isdir(bt_parent):
+    try:
+        versions = sorted([v for v in os.listdir(bt_parent) if os.path.isdir(os.path.join(bt_parent, v))],
+                          key=lambda s: [int(x) if x.isdigit() else x for x in s.split('.')])
+        if versions:
+            BUILD_TOOLS_DIR = os.path.join(bt_parent, versions[-1])
+    except Exception:
+        pass
+
+AAPT2 = os.path.join(BUILD_TOOLS_DIR, "aapt2.exe") if os.name == "nt" else os.path.join(BUILD_TOOLS_DIR, "aapt2")
+ZIPALIGN = os.path.join(BUILD_TOOLS_DIR, "zipalign.exe") if os.name == "nt" else os.path.join(BUILD_TOOLS_DIR, "zipalign")
+APKSIGNER = os.path.join(BUILD_TOOLS_DIR, "apksigner.bat") if os.name == "nt" else os.path.join(BUILD_TOOLS_DIR, "apksigner")
+D8 = os.path.join(BUILD_TOOLS_DIR, "d8.bat") if os.name == "nt" else os.path.join(BUILD_TOOLS_DIR, "d8")
+
+ANDROID_JAR = ""
+platforms_dir = os.path.join(SDK, "platforms") if SDK else ""
+if os.path.isdir(platforms_dir):
+    candidates = sorted([p for p in os.listdir(platforms_dir) if os.path.exists(os.path.join(platforms_dir, p, "android.jar"))], reverse=True)
+    if candidates:
+        ANDROID_JAR = os.path.join(platforms_dir, candidates[0], "android.jar")
+
+NDK_DIR = os.environ.get("ANDROID_NDK_HOME") or ""
+if not NDK_DIR and SDK:
+    ndk_parent = os.path.join(SDK, "ndk")
+    if os.path.isdir(ndk_parent):
+        ndk_candidates = sorted([v for v in os.listdir(ndk_parent) if os.path.isdir(os.path.join(ndk_parent, v))], reverse=True)
+        if ndk_candidates:
+            NDK_DIR = os.path.join(ndk_parent, ndk_candidates[0])
+
+STRIP = ""
+if NDK_DIR:
+    strip_pattern = os.path.join(NDK_DIR, "toolchains", "llvm", "prebuilt", "*", "bin", "llvm-strip" + (".exe" if os.name == "nt" else ""))
+    matches = glob.glob(strip_pattern)
+    if matches:
+        STRIP = matches[0]
+
+JAVAC = shutil.which("javac")
+if not JAVAC:
+    for candidate in [r"C:\Program Files\Java\jdk-17\bin\javac.exe", r"C:\Program Files\Java\latest\bin\javac.exe"]:
+        if os.path.exists(candidate):
+            JAVAC = candidate
+            break
+if not JAVAC:
+    JAVAC = "javac"
+
+def resolve_keystore_pass(channel="tester"):
+    val = os.environ.get("GALAXY_KEYSTORE_PASS")
+    if val:
+        return val
+    # No channel accepts a default password: the compromised key's password was
+    # published, and "android" must never become an implicit credential again.
+    raise SystemExit(
+        "REFUSING TO PACKAGE [%s]: GALAXY_KEYSTORE_PASS environment variable is required." % channel)
+
+KEYSTORE_PASS = os.environ.get("GALAXY_KEYSTORE_PASS", "")
+KEY_ALIAS = os.environ.get("GALAXY_KEY_ALIAS") or "androiddebugkey"
+KEY_PASS = os.environ.get("GALAXY_KEY_PASS", "")
+KEYTOOL = shutil.which("keytool") or "keytool"
+
+# Published in the repository history together with its password: anyone can
+# reproduce this certificate, so it must never sign another artifact.
+COMPROMISED_KEY_SHA256 = "1883cd600aacd5628513e23ce646f4c8ed19c040a14575fbc922d33f6686feff"
+
+def normalize_fingerprint(value):
+    return re.sub(r"[^0-9a-f]", "", value.lower())
+
+def certificate_fingerprints(output):
+    """Every signer certificate in `apksigner verify --print-certs` output."""
+    return [normalize_fingerprint(m)
+            for m in re.findall(r"certificate SHA-256 digest:\s*([0-9A-Fa-f:]+)", output)]
+
+EXPECTED_SIGNER = normalize_fingerprint(os.environ.get("GALAXY_EXPECTED_SIGNER_SHA256", ""))
+LOCAL_KEYSTORE = os.path.join(ROOT, "out", "release.keystore")
+KEYSTORE_CANDIDATES = [LOCAL_KEYSTORE, os.path.join(ROOT, "out", "debug.keystore"),
+                       os.path.join(ROOT, "platform", "mobile", "release.keystore")]
+DEV_KEYSTORE = os.path.join(ROOT, "out", "dev.keystore")
+KEYSTORE = ""
+EXTRACTED_KEYSTORE = ""
+ANDROID_NS = "{http://schemas.android.com/apk/res/android}"
+
+
+def check_signer(fingerprint, channel="tester"):
+    """Why this certificate must not sign an artifact, or None if it may."""
+    fingerprint = normalize_fingerprint(fingerprint or "")
+    if not fingerprint:
+        return "could not determine the signer certificate"
+    if fingerprint == COMPROMISED_KEY_SHA256:
+        return ("certificate %s is the signing key published in the repository history; "
+                "rotate the signing identity and never use it again" % fingerprint)
+    expected = normalize_fingerprint(os.environ.get("GALAXY_EXPECTED_SIGNER_SHA256", ""))
+    if expected and fingerprint != expected:
+        return "certificate %s does not match the pinned signer %s" % (fingerprint, expected)
+    if channel == "production" and not expected:
+        return "production requires GALAXY_EXPECTED_SIGNER_SHA256 naming the rotated release key"
+    return None
+
+def signing_alias(channel="tester"):
+    """The alias that must sign this channel; production has no default."""
+    alias = (os.environ.get("GALAXY_KEY_ALIAS") or "").strip()
+    if alias:
+        return alias
+    if channel == "production":
+        raise SystemExit("REFUSING TO PACKAGE [production]: "
+                         "GALAXY_KEY_ALIAS must name the rotated release key.")
+    return KEY_ALIAS
+
+
+MANIFEST = os.path.join(ROOT, "platform", "mobile", "AndroidManifest.xml")
+
+def manifest_is_debuggable(path=MANIFEST):
+    application = ET.parse(path).getroot().find("application")
+    return application is not None and application.get(ANDROID_NS + "debuggable") == "true"
+
+def keystore_fingerprint(keystore, storepass=None, alias=None):
+    sp = storepass or resolve_keystore_pass(channel="tester")
+    # Check the certificate of the alias that apksigner will actually use. A
+    # keystore may hold several keys (for example the compromised debug key
+    # alongside the rotated release key), and listing the whole store can
+    # report a different certificate than the one that signs the APK.
+    key_alias = alias or (os.environ.get("GALAXY_KEY_ALIAS") or KEY_ALIAS)
+    env = dict(os.environ)
+    env["_GALAXY_KT_PASS"] = sp
+    try:
+        proc = subprocess.run([KEYTOOL, "-list", "-v", "-keystore", keystore,
+                               "-alias", key_alias,
+                               "-storepass:env", "_GALAXY_KT_PASS"],
+                              capture_output=True, text=True, env=env)
+    except OSError:
+        return None
+    match = re.search(r"SHA-?256:\s*([0-9A-Fa-f:]+)", proc.stdout)
+    return normalize_fingerprint(match.group(1)) if match else None
+
+def cleanup_extracted_keystore():
+    """Removes key material decoded from GALAXY_KEYSTORE_B64, if any."""
+    global EXTRACTED_KEYSTORE, KEYSTORE
+    path = EXTRACTED_KEYSTORE
+    EXTRACTED_KEYSTORE = ""
+    if not path:
+        return
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
+    if KEYSTORE == path:
+        KEYSTORE = ""
+
+
+def _cleanup_on_signal(signum, _frame):
+    cleanup_extracted_keystore()
+    raise SystemExit(128 + signum)
+
+
+def _install_signal_cleanup():
+    """SIGTERM/SIGHUP bypass atexit, so spilled key material needs a handler."""
+    if os.name == "nt":
+        return
+    import signal
+    try:
+        for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+            signal.signal(sig, _cleanup_on_signal)
+    except ValueError:
+        pass  # not the main thread; atexit still covers normal exits
+
+
+_install_signal_cleanup()
+
+
+def _extract_keystore(data):
+    """Writes CI key material to a private 0600 temp file in the ignored out/ dir."""
+    global EXTRACTED_KEYSTORE
+    cleanup_extracted_keystore()
+    out_dir = os.path.join(ROOT, "out")
+    os.makedirs(out_dir, exist_ok=True)
+    fd, path = tempfile.mkstemp(prefix="galaxy-signing-", suffix=".keystore", dir=out_dir)
+    try:
+        os.chmod(path, 0o600)
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+    except BaseException:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+        raise
+    EXTRACTED_KEYSTORE = path
+    atexit.register(cleanup_extracted_keystore)
+    return path
+
+
+def prepare_signing_key(channel="tester"):
+    global KEYSTORE
+    storepass = resolve_keystore_pass(channel=channel)
+    alias = signing_alias(channel)
+    encoded = os.environ.get("GALAXY_KEYSTORE_B64")
+    if encoded:
+        try:
+            compact = re.sub(r"\s+", "", encoded)
+            data = base64.b64decode(compact, validate=True)
+        except Exception as exc:
+            raise SystemExit(f"GALAXY_KEYSTORE_B64 is not valid base64: {exc}")
+        if len(data) < 128:
+            raise SystemExit(f"GALAXY_KEYSTORE_B64 decoded to {len(data)} bytes, which is not a keystore")
+        KEYSTORE = _extract_keystore(data)
+    else:
+        explicit = os.environ.get("GALAXY_KEYSTORE")
+        if explicit:
+            if os.path.exists(explicit):
+                KEYSTORE = explicit
+            elif os.environ.get("GALAXY_ALLOW_NEW_KEY") == "1" and channel != "production":
+                env = dict(os.environ)
+                env["_GALAXY_KT_PASS"] = storepass
+                env["_GALAXY_KT_KEYPASS"] = os.environ.get("GALAXY_KEY_PASS", storepass)
+                parent_dir = os.path.dirname(explicit)
+                if parent_dir:
+                    os.makedirs(parent_dir, exist_ok=True)
+                subprocess.run([KEYTOOL, "-genkeypair", "-keystore", explicit,
+                                "-storepass:env", "_GALAXY_KT_PASS", "-keypass:env", "_GALAXY_KT_KEYPASS",
+                                "-alias", KEY_ALIAS, "-keyalg", "RSA", "-keysize", "2048",
+                                "-validity", "10000", "-dname", "CN=GalaxyAndroid Dev,O=Local,C=US"],
+                               check=True, env=env)
+                KEYSTORE = explicit
+            else:
+                raise SystemExit(f"REFUSING TO PACKAGE [{channel}]: explicit keystore not found: {explicit}")
+        else:
+            for candidate in KEYSTORE_CANDIDATES:
+                if candidate and os.path.exists(candidate):
+                    KEYSTORE = candidate
+                    break
+            if not KEYSTORE:
+                if channel == "production":
+                    raise SystemExit("REFUSING TO PACKAGE [production]: no signing keystore found.")
+                if os.environ.get("GALAXY_ALLOW_NEW_KEY") == "1":
+                    env = dict(os.environ)
+                    env["_GALAXY_KT_PASS"] = storepass
+                    env["_GALAXY_KT_KEYPASS"] = os.environ.get("GALAXY_KEY_PASS", storepass)
+                    subprocess.run([KEYTOOL, "-genkeypair", "-keystore", DEV_KEYSTORE,
+                                    "-storepass:env", "_GALAXY_KT_PASS", "-keypass:env", "_GALAXY_KT_KEYPASS",
+                                    "-alias", KEY_ALIAS, "-keyalg", "RSA", "-keysize", "2048",
+                                    "-validity", "10000", "-dname", "CN=GalaxyAndroid Dev,O=Local,C=US"],
+                                   check=True, env=env)
+                    KEYSTORE = DEV_KEYSTORE
+                else:
+                    raise SystemExit("REFUSING TO PACKAGE: no signing key found.")
+
+    fingerprint = keystore_fingerprint(KEYSTORE, storepass=storepass, alias=alias)
+    problem = check_signer(fingerprint, channel=channel)
+    if problem:
+        raise SystemExit(f"REFUSING TO PACKAGE {KEYSTORE}: {problem}")
+    if channel != "production" and not os.environ.get("GALAXY_EXPECTED_SIGNER_SHA256"):
+        print("[SIGNING] Tester certificate %s is not pinned; "
+              "set GALAXY_EXPECTED_SIGNER_SHA256 before publishing." % fingerprint)
+    return KEYSTORE
+
+def verify_signed_apk(path, channel="tester"):
+    proc = subprocess.run([APKSIGNER, "verify", "--print-certs", path], capture_output=True, text=True)
+    text = proc.stdout + proc.stderr
+    fingerprints = certificate_fingerprints(text)
+    if proc.returncode != 0 or not fingerprints:
+        raise SystemExit(f"REFUSING TO RELEASE: {path} did not verify:\n{text.strip()}")
+    # A second signer could carry a different identity past the pinned-certificate
+    # check, so the release artifact must have exactly one signer.
+    if len(fingerprints) != 1:
+        raise SystemExit(f"REFUSING TO RELEASE {path}: found {len(fingerprints)} signer "
+                         "certificates; an APK must carry exactly one signer")
+    fingerprint = fingerprints[0]
+    problem = check_signer(fingerprint, channel=channel)
+    if problem:
+        raise SystemExit(f"REFUSING TO RELEASE {path}: {problem}")
+    return fingerprint
