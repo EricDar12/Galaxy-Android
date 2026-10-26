@@ -35,7 +35,7 @@ Stat sWork, sRecord, sPrepare, sRenderCpu, sUpload, sGpuWait, sUpdate, sPresent,
 Stat sShaderCompile, sPipelineCreate, sQueueWait;
 unsigned sFrames = 0, sRenderFrames = 0;
 int64_t sFrameStart = 0, sRecordThisFrame = 0, sWindowStart = 0;
-int64_t sLastFrameEnd = 0;
+int64_t sLastFrameBegin = 0;
 
 // Rolling window for percentiles (last 64 frames)
 constexpr size_t kRollingWindowSize = 64;
@@ -110,8 +110,8 @@ void port_perf_frame_begin(void) {
     std::lock_guard<std::mutex> lock(sLock);
     int64_t now = port_host_time_ns();
     if (!sWindowStart) sWindowStart = now;
-    if (sLastFrameEnd > 0) {
-        double frameIntervalMs = (now - sLastFrameEnd) / 1e6;
+    if (sLastFrameBegin > 0) {
+        double frameIntervalMs = (now - sLastFrameBegin) / 1e6;
         sRollingIntervals[sRollingIdx] = frameIntervalMs;
         sRollingIdx = (sRollingIdx + 1) % kRollingWindowSize;
         if (sRollingCount < kRollingWindowSize) sRollingCount++;
@@ -134,6 +134,7 @@ void port_perf_frame_begin(void) {
             sSlowdownReported = false;
         }
     }
+    sLastFrameBegin = now;
     sFrameStart = now;
     sRecordThisFrame = 0;
 }
@@ -146,7 +147,6 @@ void port_perf_frame_work_done(void) {
         sRecord.add(sRecordThisFrame / 1e6);
         sFrames++;
     }
-    sLastFrameEnd = now;
     if (now - sWindowStart >= 10000000000ll) {
         report(now);
     }

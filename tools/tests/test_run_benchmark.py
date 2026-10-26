@@ -110,6 +110,33 @@ class TestBenchmarkSuite(unittest.TestCase):
                 j = json.load(f)
                 self.assertEqual(j["metadata"]["mode"], "synthetic")
 
+    def test_no_raw_intervals_reports_unavailable(self):
+        log_sample = (
+            "perf: game 60.0 fps, intervals [p50=16.6ms, p95=16.9ms, p99=17.2ms], "
+            "work 4.1 ms avg; renderer 60.0 fps, cpu 3.7 ms\n"
+        )
+        data = parse_benchmark_log(log_sample)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            json_file = os.path.join(tmp_dir, "window_only.json")
+            csv_file = os.path.join(tmp_dir, "window_only.csv")
+            summary = generate_report(data, json_file, csv_file)
+            self.assertEqual(summary["metadata"]["percentile_source"], "unavailable")
+            self.assertIsNone(summary["metrics"]["frame_time_percentiles_ms"]["p50"])
+            self.assertEqual(len(summary["metrics"]["per_window_reported_intervals"]), 1)
+            self.assertEqual(summary["metrics"]["per_window_reported_intervals"][0]["p50_ms"], 16.6)
+
+    def test_duplicate_snapshots_deduplicated(self):
+        log_sample = (
+            "VkDrawDiag: frame=10 draws=100 (hud=0 scSkip=0 setBinds=10) realTex=1 dummyTex=0 copySlot=0 copyHits=0 copyFallbacks=0 copyMisses=0 mruHit=100 mruMiss=10 rtNew=0 rtKnownUid=0 record=1.0ms\n"
+            "VkDrawDiag: frame=10 draws=100 (hud=0 scSkip=0 setBinds=10) realTex=1 dummyTex=0 copySlot=0 copyHits=0 copyFallbacks=0 copyMisses=0 mruHit=100 mruMiss=10 rtNew=0 rtKnownUid=0 record=1.0ms\n"
+            "VkDrawDiag: frame=20 draws=100 (hud=0 scSkip=0 setBinds=10) realTex=1 dummyTex=0 copySlot=0 copyHits=0 copyFallbacks=0 copyMisses=0 mruHit=150 mruMiss=10 rtNew=0 rtKnownUid=0 record=1.0ms\n"
+        )
+        data = parse_benchmark_log(log_sample)
+        self.assertEqual(len(data["diag_samples"]), 3)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            summary = generate_report(data, os.path.join(tmp_dir, "dedup.json"), None)
+            self.assertEqual(summary["metrics"]["pipeline_mru_hits_delta"], 50)
+
     def test_cli_no_args_exit_code_2(self):
         cmd = [sys.executable, "tools/benchmarks/run_benchmark.py"]
         res = subprocess.run(cmd, capture_output=True, text=True)

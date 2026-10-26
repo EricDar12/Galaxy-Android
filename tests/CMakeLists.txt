@@ -153,6 +153,16 @@ if(WIN32)
 endif()
 add_test(NAME netplay COMMAND netplay_test)
 
+add_executable(vk_texture_staging_test
+  test_vk_texture_staging.cpp
+  ${CMAKE_SOURCE_DIR}/platform/src/gx/vk/vk_texture_staging_util.cpp
+)
+target_include_directories(vk_texture_staging_test PRIVATE
+  ${CMAKE_SOURCE_DIR}/platform/include
+  ${CMAKE_SOURCE_DIR}/platform/src
+)
+add_test(NAME vk_texture_staging COMMAND vk_texture_staging_test)
+
 # Run under CTest without depending on which libstdc++ happens to be first on
 # PATH; an older MSYS2 runtime can lack symbols the compiler emits.
 get_property(_all_test_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)

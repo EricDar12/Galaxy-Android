@@ -126,16 +126,15 @@ def run_adb_capture(duration_sec=5, package="com.openport.galaxyandroid"):
     except Exception:
         pass
 
-    cmd = ["adb", "logcat", "-v", "time"]
+    subprocess.run(["adb", "logcat", "-c"], capture_output=True)
+    time.sleep(duration_sec)
+    cmd = ["adb", "logcat", "-d", "-v", "time"]
     if pid:
         cmd.extend(["--pid", pid])
     else:
         cmd.extend(["-s", "PetariVR:I", "PetariVK:I", "FramePacer:I"])
-
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    time.sleep(duration_sec)
-    proc.terminate()
-    stdout, _ = proc.communicate(timeout=5)
+    res = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
+    stdout = res.stdout
     if not stdout or len(stdout.strip()) == 0:
         raise RuntimeError("ADB logcat capture produced 0 bytes of logs.")
     return stdout, device_info
@@ -143,24 +142,23 @@ def run_adb_capture(duration_sec=5, package="com.openport.galaxyandroid"):
 def generate_report(data, out_json_path, out_csv_path, meta=None):
     if meta is None:
         meta = {}
-
-    if data["raw_intervals_ms"]:
+    is_synth = meta.get("mode") == "synthetic"
+    if is_synth:
+        pct = compute_percentiles(data["raw_intervals_ms"]) if data["raw_intervals_ms"] else {
+            "p50": 16.6, "p90": 16.7, "p95": 16.8, "p99": 17.1, "max": 17.5
+        }
+        pct_source = "synthetic_demo_data"
+    elif data["raw_intervals_ms"]:
         pct = compute_percentiles(data["raw_intervals_ms"])
         pct_source = "measured_raw_samples"
-    elif data["reported_p50_ms"]:
-        n = len(data["reported_p50_ms"])
-        pct = {
-            "p50": round(sum(data["reported_p50_ms"]) / n, 2),
-            "p90": None,
-            "p95": round(sum(data["reported_p95_ms"]) / n, 2),
-            "p99": round(sum(data["reported_p99_ms"]) / n, 2),
-            "max": None,
-        }
-        pct_source = "preserved_reported_aggregates"
     else:
         pct = {"p50": None, "p90": None, "p95": None, "p99": None, "max": None}
         pct_source = "unavailable"
 
+    window_reports = [
+        {"window": i, "p50_ms": p50, "p95_ms": p95, "p99_ms": p99}
+        for i, (p50, p95, p99) in enumerate(zip(data["reported_p50_ms"], data["reported_p95_ms"], data["reported_p99_ms"]))
+    ]
     fps_count = len(data["fps_samples"])
     avg_fps = round(sum(data["fps_samples"]) / fps_count, 2) if fps_count > 0 else None
     draw_count = len(data["draw_counts"])
@@ -168,13 +166,16 @@ def generate_report(data, out_json_path, out_csv_path, meta=None):
     bind_count = len(data["set_binds"])
     avg_binds = round(sum(data["set_binds"]) / bind_count, 1) if bind_count > 0 else None
 
-    if data["diag_samples"]:
-        hits_series = [s[1] for s in data["diag_samples"]]
-        misses_series = [s[2] for s in data["diag_samples"]]
-        rt_new_series = [s[3] for s in data["diag_samples"]]
-        hits_delta = compute_cumulative_delta(hits_series)
-        misses_delta = compute_cumulative_delta(misses_series)
-        rt_new_delta = compute_cumulative_delta(rt_new_series)
+    seen_frames, unique_diag = set(), []
+    for s in data["diag_samples"]:
+        if s[0] not in seen_frames:
+            seen_frames.add(s[0])
+            unique_diag.append(s)
+
+    if unique_diag:
+        hits_delta = compute_cumulative_delta([s[1] for s in unique_diag])
+        misses_delta = compute_cumulative_delta([s[2] for s in unique_diag])
+        rt_new_delta = compute_cumulative_delta([s[3] for s in unique_diag])
         tot_mru = hits_delta + misses_delta
         mru_hit_rate = round(hits_delta * 100.0 / tot_mru, 1) if tot_mru > 0 else None
     else:
@@ -195,11 +196,13 @@ def generate_report(data, out_json_path, out_csv_path, meta=None):
                 "fps_samples": fps_count,
                 "draw_samples": draw_count,
                 "raw_intervals": len(data["raw_intervals_ms"]),
+                "window_reports": len(window_reports),
             },
         },
         "metrics": {
             "average_fps": avg_fps,
             "frame_time_percentiles_ms": pct,
+            "per_window_reported_intervals": window_reports,
             "draw_calls_per_frame_avg": avg_draws,
             "descriptor_set_binds_avg": avg_binds,
             "pipeline_mru_cache_hit_rate_pct": mru_hit_rate,
@@ -222,19 +225,17 @@ def generate_report(data, out_json_path, out_csv_path, meta=None):
             f.write("metric,value,classification\n")
             def w(k, v, cls):
                 f.write(f"{k},{'unavailable' if v is None else v},{cls}\n")
-            m = summary["metrics"]
-            p = m["frame_time_percentiles_ms"]
-            w("average_fps", m["average_fps"], "measured" if m["average_fps"] else "unavailable")
-            w("frame_time_p50_ms", p["p50"], pct_source)
-            w("frame_time_p90_ms", p["p90"], pct_source)
-            w("frame_time_p95_ms", p["p95"], pct_source)
-            w("frame_time_p99_ms", p["p99"], pct_source)
-            w("frame_time_max_ms", p["max"], pct_source)
-            w("draw_calls_avg", m["draw_calls_per_frame_avg"], "measured" if m["draw_calls_per_frame_avg"] else "unavailable")
-            w("descriptor_binds_avg", m["descriptor_set_binds_avg"], "measured" if m["descriptor_set_binds_avg"] else "unavailable")
-            w("mru_hit_rate_pct", m["pipeline_mru_cache_hit_rate_pct"], "derived" if m["pipeline_mru_cache_hit_rate_pct"] else "unavailable")
-            w("runtime_pipeline_creations", m["runtime_pipeline_creations_delta"], "measured" if m["runtime_pipeline_creations_delta"] is not None else "unavailable")
-            w("textures_staged_kb", m["textures_staged_kb"], "measured" if m["textures_staged_kb"] is not None else "unavailable")
+            m, p = summary["metrics"], summary["metrics"]["frame_time_percentiles_ms"]
+            c = "synthetic" if is_synth else "measured"
+            w("average_fps", m["average_fps"], c if m["average_fps"] is not None else "unavailable")
+            for k in ("p50", "p90", "p95", "p99", "max"):
+                w(f"frame_time_{k}_ms", p[k], pct_source)
+            w("draw_calls_avg", m["draw_calls_per_frame_avg"], c if m["draw_calls_per_frame_avg"] is not None else "unavailable")
+            w("descriptor_binds_avg", m["descriptor_set_binds_avg"], c if m["descriptor_set_binds_avg"] is not None else "unavailable")
+            mru_c = "synthetic" if is_synth else "derived"
+            w("mru_hit_rate_pct", m["pipeline_mru_cache_hit_rate_pct"], mru_c if m["pipeline_mru_cache_hit_rate_pct"] is not None else "unavailable")
+            w("runtime_pipeline_creations", m["runtime_pipeline_creations_delta"], c if m["runtime_pipeline_creations_delta"] is not None else "unavailable")
+            w("textures_staged_kb", m["textures_staged_kb"], c if m["textures_staged_kb"] is not None else "unavailable")
 
     return summary
 
@@ -283,15 +284,15 @@ def main():
 
     m = summary["metrics"]
     p = m["frame_time_percentiles_ms"]
-    print(f"=== Super Mario Galaxy Android Benchmark Results [Mode: {meta['mode']}] ===")
-    print(f"Average FPS:          {'N/A (unavailable)' if m['average_fps'] is None else m['average_fps']}")
-    print(f"Frame Time P50:       {'N/A (unavailable)' if p['p50'] is None else str(p['p50']) + ' ms'} ({summary['metadata']['percentile_source']})")
-    print(f"Frame Time P95:       {'N/A (unavailable)' if p['p95'] is None else str(p['p95']) + ' ms'}")
-    print(f"Frame Time P99:       {'N/A (unavailable)' if p['p99'] is None else str(p['p99']) + ' ms'}")
-    print(f"Draw Calls / Frame:   {'N/A (unavailable)' if m['draw_calls_per_frame_avg'] is None else m['draw_calls_per_frame_avg']}")
-    print(f"MRU Cache Hit Rate:   {'N/A (unavailable)' if m['pipeline_mru_cache_hit_rate_pct'] is None else str(m['pipeline_mru_cache_hit_rate_pct']) + '%'}")
-    print(f"Runtime Creates:      {'N/A (unavailable)' if m['runtime_pipeline_creations_delta'] is None else m['runtime_pipeline_creations_delta']}")
-    print(f"Reports saved to: {args.out_json} & {args.out_csv}")
+    print(f"=== Super Mario Galaxy Android Benchmark Results [Mode: {meta['mode']}] ===\n"
+          f"Average FPS:          {'N/A (unavailable)' if m['average_fps'] is None else m['average_fps']}\n"
+          f"Frame Time P50:       {'N/A (unavailable)' if p['p50'] is None else str(p['p50']) + ' ms'} ({summary['metadata']['percentile_source']})\n"
+          f"Frame Time P95:       {'N/A (unavailable)' if p['p95'] is None else str(p['p95']) + ' ms'}\n"
+          f"Frame Time P99:       {'N/A (unavailable)' if p['p99'] is None else str(p['p99']) + ' ms'}\n"
+          f"Draw Calls / Frame:   {'N/A (unavailable)' if m['draw_calls_per_frame_avg'] is None else m['draw_calls_per_frame_avg']}\n"
+          f"MRU Cache Hit Rate:   {'N/A (unavailable)' if m['pipeline_mru_cache_hit_rate_pct'] is None else str(m['pipeline_mru_cache_hit_rate_pct']) + '%'}\n"
+          f"Runtime Creates:      {'N/A (unavailable)' if m['runtime_pipeline_creations_delta'] is None else m['runtime_pipeline_creations_delta']}\n"
+          f"Reports saved to: {args.out_json} & {args.out_csv}")
 
 if __name__ == "__main__":
     main()

@@ -1,4 +1,5 @@
 #include "gx/vk/vk_common.h"
+#include "gx/vk/vk_texture_staging_util.h"
 
 namespace gpu {
 
@@ -7,77 +8,170 @@ static uint64_t sUploadFailed = 0;
 static uint64_t sUploadRecorded = 0;
 static uint64_t sUploadBytes = 0;
 
+struct BatchItem {
+    std::shared_ptr<TexImage> img;
+    VkTexture vt;
+    VkDeviceSize stagingOffset;
+    VkDeviceSize requiredBytes;
+    uint32_t levels;
+    std::vector<VkBufferImageCopy> regions;
+};
+
 void VkRenderer::uploadTextures(VkCommandBuffer cmd, const std::vector<std::shared_ptr<TexImage>>& textures) {
     if (cmd == VK_NULL_HANDLE || textures.empty()) return;
 
-    struct BatchItem {
-        std::shared_ptr<TexImage> img;
-        VkTexture vt;
-        VkDeviceSize stagingOffset;
-        VkDeviceSize requiredBytes;
-        uint32_t levels;
+    auto flushBatch = [&](std::vector<BatchItem>& batch, VkDeviceSize totalBytes) {
+        if (batch.empty()) return;
+        VkBuffer stagingBuf = VK_NULL_HANDLE;
+        VkDeviceMemory stagingMem = VK_NULL_HANDLE;
+        if (!createBuffer(totalBytes, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                          stagingBuf, stagingMem)) {
+            LOGE("uploadTextures: batch createBuffer failed (%llu bytes)", (unsigned long long)totalBytes);
+            for (auto& item : batch) {
+                vkDestroyImageView(mDevice, (VkImageView)item.vt.view, nullptr);
+                vkDestroyImage(mDevice, (VkImage)item.vt.image, nullptr);
+                vkFreeMemory(mDevice, (VkDeviceMemory)item.vt.memory, nullptr);
+                sUploadFailed++;
+            }
+            batch.clear();
+            return;
+        }
+
+        void* mapped = nullptr;
+        if (vkMapMemory(mDevice, stagingMem, 0, totalBytes, 0, &mapped) != VK_SUCCESS || !mapped) {
+            LOGE("uploadTextures: batch vkMapMemory failed (%llu bytes)", (unsigned long long)totalBytes);
+            vkDestroyBuffer(mDevice, stagingBuf, nullptr);
+            vkFreeMemory(mDevice, stagingMem, nullptr);
+            for (auto& item : batch) {
+                vkDestroyImageView(mDevice, (VkImageView)item.vt.view, nullptr);
+                vkDestroyImage(mDevice, (VkImage)item.vt.image, nullptr);
+                vkFreeMemory(mDevice, (VkDeviceMemory)item.vt.memory, nullptr);
+                sUploadFailed++;
+            }
+            batch.clear();
+            return;
+        }
+
+        for (const auto& item : batch) {
+            std::memcpy((uint8_t*)mapped + item.stagingOffset, item.img->rgba.data(), item.requiredBytes);
+        }
+        vkUnmapMemory(mDevice, stagingMem);
+
+        for (const auto& item : batch) {
+            VkImageMemoryBarrier barrierToDst{};
+            barrierToDst.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            barrierToDst.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            barrierToDst.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            barrierToDst.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrierToDst.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrierToDst.image = item.vt.image;
+            barrierToDst.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            barrierToDst.subresourceRange.levelCount = item.vt.levels;
+            barrierToDst.subresourceRange.layerCount = 1;
+            barrierToDst.srcAccessMask = 0;
+            barrierToDst.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+            vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                 VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrierToDst);
+
+            vkCmdCopyBufferToImage(cmd, stagingBuf, item.vt.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                   (uint32_t)item.regions.size(), item.regions.data());
+
+            VkImageMemoryBarrier barrierToShader = barrierToDst;
+            barrierToShader.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            barrierToShader.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            barrierToShader.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            barrierToShader.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+            vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                 VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrierToShader);
+
+            item.img->vkImage = (uint64_t)item.vt.image;
+            item.img->vkMemory = (uint64_t)item.vt.memory;
+            item.img->vkView = (uint64_t)item.vt.view;
+            item.img->vkVersion = item.vt.version;
+            item.img->vkGeneration = sVkDeviceGeneration;
+
+            sUploadRecorded++;
+            sUploadBytes += item.requiredBytes;
+        }
+
+        mStagingBuffersToFree.push_back({stagingBuf, stagingMem});
+        batch.clear();
     };
-    std::vector<BatchItem> toUpload;
-    toUpload.reserve(textures.size());
-    VkDeviceSize totalStagingBytes = 0;
+
+    std::vector<BatchItem> currentBatch;
+    VkDeviceSize currentBatchBytes = 0;
 
     for (const auto& img : textures) {
         if (!img || img->rgba.empty() || img->width == 0 || img->height == 0) continue;
         sUploadAttempted++;
 
-        if (img->width > 4096 || img->height > 4096 || img->levels > 14) {
-            LOGE("uploadTextures: texture dimensions %ux%u (%u levels) out of hardware limits",
-                 img->width, img->height, img->levels);
+        size_t availBytes = img->rgba.size() * sizeof(uint32_t);
+        auto val = validateTextureDimensions(img->width, img->height, img->levels, availBytes);
+        if (!val.valid) {
+            LOGE("uploadTextures: invalid dimensions or size: %ux%u (%u lvls, %zu bytes)",
+                 img->width, img->height, img->levels, availBytes);
             sUploadFailed++;
             continue;
         }
 
-        const uint32_t levels = img->levels ? img->levels : 1;
-        VkDeviceSize requiredBytes = 0;
-        uint32_t cw = img->width, ch = img->height;
-        bool overflow = false;
-        for (uint32_t l = 0; l < levels; l++) {
-            VkDeviceSize levelBytes = (VkDeviceSize)cw * ch * 4;
-            if (levelBytes == 0 || (levelBytes / (cw * 4) != ch)) {
-                overflow = true;
-                break;
-            }
-            requiredBytes += levelBytes;
-            cw = cw > 1 ? cw / 2 : 1;
-            ch = ch > 1 ? ch / 2 : 1;
-        }
-
-        if (overflow) {
-            LOGE("uploadTextures: arithmetic overflow calculating required size for %ux%u", img->width, img->height);
-            sUploadFailed++;
-            continue;
-        }
-
-        const size_t totalBytes = img->rgba.size() * sizeof(uint32_t);
-        if (totalBytes < (size_t)requiredBytes) {
-            LOGE("uploadTextures: buffer size mismatch for %ux%u (%u levels): rgba has %zu bytes, need %llu",
-                 img->width, img->height, levels, totalBytes, (unsigned long long)requiredBytes);
-            sUploadFailed++;
-            continue;
-        }
-
-        bool sameDevice = (img->vkGeneration == sVkDeviceGeneration);
-        if (img->vkImage != 0 && img->vkVersion == img->version && sameDevice) {
+        bool sameDev = (img->vkGeneration == sVkDeviceGeneration);
+        if (img->vkImage != 0 && img->vkVersion == img->version && sameDev) {
             continue;
         }
 
         if (img->vkView != 0 || img->vkImage != 0 || img->vkMemory != 0) {
-            if (sameDevice) {
+            if (sameDev) {
                 if (img->vkView) invalidateSamplerDescSetsForView((VkImageView)img->vkView);
                 queueVkTextureDelete(img->vkImage, img->vkMemory, img->vkView);
             }
             img->vkView = img->vkImage = img->vkMemory = 0;
         }
 
+        uint64_t alignedOffset = 0;
+        if (!alignStagingOffset(currentBatchBytes, val.requiredBytes, kMaxStagingBatchBytes, alignedOffset)) {
+            flushBatch(currentBatch, currentBatchBytes);
+            currentBatchBytes = 0;
+            if (!alignStagingOffset(currentBatchBytes, val.requiredBytes, kMaxStagingBatchBytes, alignedOffset)) {
+                LOGE("uploadTextures: single texture (%llu bytes) exceeds max batch ceiling", (unsigned long long)val.requiredBytes);
+                sUploadFailed++;
+                continue;
+            }
+        }
+
+        std::vector<VkBufferImageCopy> regions(val.levels);
+        uint64_t offsetInItem = 0;
+        uint32_t w = img->width, h = img->height;
+        bool regionsValid = true;
+        for (uint32_t l = 0; l < val.levels; l++) {
+            uint64_t levelBytes = (uint64_t)w * h * 4;
+            if (!validateMipLevelCopyBounds(l, w, h, offsetInItem, levelBytes,
+                                           alignedOffset, val.requiredBytes,
+                                           alignedOffset + val.requiredBytes, availBytes)) {
+                regionsValid = false;
+                break;
+            }
+            regions[l].bufferOffset = alignedOffset + offsetInItem;
+            regions[l].imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            regions[l].imageSubresource.mipLevel = l;
+            regions[l].imageSubresource.layerCount = 1;
+            regions[l].imageExtent = {w, h, 1};
+            offsetInItem += levelBytes;
+            w = w > 1 ? w / 2 : 1;
+            h = h > 1 ? h / 2 : 1;
+        }
+        if (!regionsValid) {
+            LOGE("uploadTextures: mip region bounds validation failed for %ux%u", img->width, img->height);
+            sUploadFailed++;
+            continue;
+        }
+
         VkTexture vt{};
         vt.width = img->width;
         vt.height = img->height;
-        vt.levels = levels;
+        vt.levels = val.levels;
         vt.version = img->version;
 
         VkImageCreateInfo ici{};
@@ -139,126 +233,19 @@ void VkRenderer::uploadTextures(VkCommandBuffer cmd, const std::vector<std::shar
             continue;
         }
 
-        VkDeviceSize alignedOffset = (totalStagingBytes + 63) & ~63ULL;
-        if (alignedOffset + requiredBytes > 128ULL * 1024 * 1024) {
-            LOGE("uploadTextures: batch size limit exceeded (%llu bytes)", (unsigned long long)(alignedOffset + requiredBytes));
-            vkDestroyImageView(mDevice, vt.view, nullptr);
-            vkDestroyImage(mDevice, vt.image, nullptr);
-            vkFreeMemory(mDevice, vt.memory, nullptr);
-            sUploadFailed++;
-            continue;
-        }
-        totalStagingBytes = alignedOffset + requiredBytes;
-        toUpload.push_back({img, vt, alignedOffset, requiredBytes, levels});
+        currentBatchBytes = alignedOffset + val.requiredBytes;
+        currentBatch.push_back({img, vt, alignedOffset, val.requiredBytes, val.levels, std::move(regions)});
     }
 
-    if (toUpload.empty()) return;
-
-    VkBuffer stagingBuf = VK_NULL_HANDLE;
-    VkDeviceMemory stagingMem = VK_NULL_HANDLE;
-    if (!createBuffer(totalStagingBytes, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                      stagingBuf, stagingMem)) {
-        LOGE("uploadTextures: createBuffer failed for batch staging (%llu bytes)", (unsigned long long)totalStagingBytes);
-        for (auto& item : toUpload) {
-            vkDestroyImageView(mDevice, (VkImageView)item.vt.view, nullptr);
-            vkDestroyImage(mDevice, (VkImage)item.vt.image, nullptr);
-            vkFreeMemory(mDevice, (VkDeviceMemory)item.vt.memory, nullptr);
-            sUploadFailed++;
-        }
-        return;
+    if (!currentBatch.empty()) {
+        flushBatch(currentBatch, currentBatchBytes);
     }
 
-    void* mapped = nullptr;
-    if (vkMapMemory(mDevice, stagingMem, 0, totalStagingBytes, 0, &mapped) != VK_SUCCESS || !mapped) {
-        LOGE("uploadTextures: vkMapMemory failed for batch staging (%llu bytes)", (unsigned long long)totalStagingBytes);
-        vkDestroyBuffer(mDevice, stagingBuf, nullptr);
-        vkFreeMemory(mDevice, stagingMem, nullptr);
-        for (auto& item : toUpload) {
-            vkDestroyImageView(mDevice, (VkImageView)item.vt.view, nullptr);
-            vkDestroyImage(mDevice, (VkImage)item.vt.image, nullptr);
-            vkFreeMemory(mDevice, (VkDeviceMemory)item.vt.memory, nullptr);
-            sUploadFailed++;
-        }
-        return;
-    }
-
-    for (const auto& item : toUpload) {
-        memcpy((uint8_t*)mapped + item.stagingOffset, item.img->rgba.data(), item.requiredBytes);
-    }
-    vkUnmapMemory(mDevice, stagingMem);
-
-    for (const auto& item : toUpload) {
-        VkImageMemoryBarrier barrierToDst{};
-        barrierToDst.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrierToDst.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        barrierToDst.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        barrierToDst.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrierToDst.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrierToDst.image = item.vt.image;
-        barrierToDst.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        barrierToDst.subresourceRange.levelCount = item.vt.levels;
-        barrierToDst.subresourceRange.layerCount = 1;
-        barrierToDst.srcAccessMask = 0;
-        barrierToDst.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-
-        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                             VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrierToDst);
-
-        std::vector<VkBufferImageCopy> regions(item.vt.levels);
-        VkDeviceSize offset = item.stagingOffset;
-        uint32_t w = item.vt.width, h = item.vt.height;
-        bool regionOk = true;
-        for (uint32_t l = 0; l < item.vt.levels; l++) {
-            VkDeviceSize levelBytes = (VkDeviceSize)w * h * 4;
-            if (offset + levelBytes > item.stagingOffset + item.requiredBytes ||
-                offset + levelBytes > totalStagingBytes) {
-                regionOk = false;
-                break;
-            }
-            regions[l].bufferOffset = offset;
-            regions[l].imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            regions[l].imageSubresource.mipLevel = l;
-            regions[l].imageSubresource.layerCount = 1;
-            regions[l].imageExtent = {w, h, 1};
-            offset += levelBytes;
-            w = w > 1 ? w / 2 : 1;
-            h = h > 1 ? h / 2 : 1;
-        }
-        if (!regionOk) {
-            LOGE("uploadTextures: copy region bounds check failed for %ux%u", item.vt.width, item.vt.height);
-            continue;
-        }
-
-        vkCmdCopyBufferToImage(cmd, stagingBuf, item.vt.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                               (uint32_t)regions.size(), regions.data());
-
-        VkImageMemoryBarrier barrierToShader = barrierToDst;
-        barrierToShader.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        barrierToShader.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        barrierToShader.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        barrierToShader.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
-        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrierToShader);
-
-        item.img->vkImage = (uint64_t)item.vt.image;
-        item.img->vkMemory = (uint64_t)item.vt.memory;
-        item.img->vkView = (uint64_t)item.vt.view;
-        item.img->vkVersion = item.vt.version;
-        item.img->vkGeneration = sVkDeviceGeneration;
-
-        sUploadRecorded++;
-        sUploadBytes += (item.img->rgba.size() * sizeof(uint32_t));
-    }
-
-    mStagingBuffersToFree.push_back({stagingBuf, stagingMem});
-
-    if (sUploadRecorded % 200 == 0) {
+    if (sUploadRecorded % 200 == 0 && sUploadRecorded > 0) {
         LOGI("VkRenderer textures: %llu attempted, %llu recorded, %llu failed, %llu KB staged",
              (unsigned long long)sUploadAttempted, (unsigned long long)sUploadRecorded,
              (unsigned long long)sUploadFailed, (unsigned long long)(sUploadBytes / 1024));
     }
 }
 
-}  // namespace gpu
+} // namespace gpu

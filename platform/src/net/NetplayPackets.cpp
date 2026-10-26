@@ -19,11 +19,10 @@ void NetplayManager::sendPacket(uint8_t type, const void* payload,
     size_t totalSize = sizeof(PacketHeader) + payloadSize;
     std::vector<uint8_t> buffer(totalSize);
 
-    PacketHeader* hdr = (PacketHeader*)buffer.data();
-    hdr->magic = kNetMagic;
-    hdr->version = kNetVersion;
-    hdr->type = type;
-    hdr->seq = 0;
+    netWriteLe32(buffer.data(), kNetMagic);
+    buffer[4] = kNetVersion;
+    buffer[5] = type;
+    netWriteLe16(buffer.data() + 6, 0);
 
     if (payload && payloadSize > 0) {
         std::memcpy(buffer.data() + sizeof(PacketHeader), payload, payloadSize);
@@ -52,11 +51,10 @@ void NetplayManager::workerLoop() {
                 b.port = (uint16_t)mHostPort;
 
                 uint8_t bBuf[sizeof(PacketHeader) + sizeof(BeaconPayload)];
-                PacketHeader* bHdr = (PacketHeader*)bBuf;
-                bHdr->magic = kNetMagic;
-                bHdr->version = kNetVersion;
-                bHdr->type = PKT_BEACON_BROADCAST;
-                bHdr->seq = 0;
+                netWriteLe32(bBuf, kNetMagic);
+                bBuf[4] = kNetVersion;
+                bBuf[5] = PKT_BEACON_BROADCAST;
+                netWriteLe16(bBuf + 6, 0);
                 std::memcpy(bBuf + sizeof(PacketHeader), &b, sizeof(b));
                 mSocket.broadcast(bBuf, sizeof(bBuf), kDefaultPort);
             }
@@ -101,24 +99,34 @@ void NetplayManager::workerLoop() {
 void NetplayManager::handleIncomingPacket(const uint8_t* data, size_t size,
                                          const std::string& srcIp, int srcPort) {
     if (!data || size < sizeof(PacketHeader)) return;
-    PacketHeader hdr;
-    std::memcpy(&hdr, data, sizeof(PacketHeader));
-    if (hdr.magic != kNetMagic || hdr.version != kNetVersion) return;
+    uint32_t magic = netReadLe32(data);
+    uint8_t version = data[4];
+    uint8_t type = data[5];
+    if (magic != kNetMagic || version != kNetVersion) return;
+    if (type < PKT_BEACON_BROADCAST || type > PKT_EVENT) return;
 
     const uint8_t* payload = data + sizeof(PacketHeader);
     size_t payloadSize = size - sizeof(PacketHeader);
 
-    if (hdr.type == PKT_BEACON_BROADCAST && payloadSize >= sizeof(BeaconPayload)) {
+    if (type == PKT_BEACON_BROADCAST) {
+        if (payloadSize < sizeof(BeaconPayload)) return;
         BeaconPayload b;
         std::memcpy(&b, payload, sizeof(BeaconPayload));
+        uint16_t port = netReadLe16((const uint8_t*)&b.port);
+        if (port == 0) return;
+        if (b.mode < PORT_NET_MODE_COOP || b.mode > PORT_NET_MODE_COSTAR) return;
+
         PortLanHostInfo hostInfo;
         std::memset(&hostInfo, 0, sizeof(hostInfo));
         std::strncpy(hostInfo.name, b.roomName, sizeof(hostInfo.name) - 1);
+        hostInfo.name[sizeof(hostInfo.name) - 1] = '\0';
         std::strncpy(hostInfo.ip, srcIp.c_str(), sizeof(hostInfo.ip) - 1);
-        hostInfo.port = b.port;
+        hostInfo.ip[sizeof(hostInfo.ip) - 1] = '\0';
+        hostInfo.port = port;
         hostInfo.mode = b.mode;
         std::strncpy(hostInfo.stage, b.stage, sizeof(hostInfo.stage) - 1);
-        hostInfo.scenario = b.scenario;
+        hostInfo.stage[sizeof(hostInfo.stage) - 1] = '\0';
+        hostInfo.scenario = netReadLeI32((const uint8_t*)&b.scenario);
         hostInfo.playerCount = b.playerCount;
         hostInfo.lastSeenMs = getNowMs();
 
@@ -138,26 +146,37 @@ void NetplayManager::handleIncomingPacket(const uint8_t* data, size_t size,
         return;
     }
 
-    if (hdr.type == PKT_CONNECT_REQ && mRole.load() == PORT_NET_ROLE_HOST) {
+    if (type == PKT_CONNECT_REQ) {
+        if (mRole.load() != PORT_NET_ROLE_HOST || mConnected.load()) return;
+        if (payloadSize < sizeof(ConnectReqPayload)) return;
+        ConnectReqPayload req;
+        std::memcpy(&req, payload, sizeof(ConnectReqPayload));
+        if (req.preferredMode < PORT_NET_MODE_COOP || req.preferredMode > PORT_NET_MODE_COSTAR) return;
+        if (req.playerName[0] == '\0') return;
+
         mPeerIp = srcIp;
         mPeerPort = srcPort;
         mConnected.store(true);
         mLastPacketReceived = std::chrono::steady_clock::now();
 
-        ConnectAckPayload ack;
+        ConnectAckPayload ack{};
         ack.accepted = 1;
         ack.assignedRole = (uint8_t)PORT_NET_ROLE_CLIENT;
         ack.mode = (uint8_t)mMode.load();
         std::strncpy(ack.hostName, mRoomName.c_str(), sizeof(ack.hostName) - 1);
+        ack.hostName[sizeof(ack.hostName) - 1] = '\0';
         sendPacket(PKT_CONNECT_ACK, &ack, sizeof(ack), srcIp, srcPort);
         PORT_LOG("NetplayManager: accepted client %s:%d\n", srcIp.c_str(), srcPort);
         return;
     }
 
-    if (hdr.type == PKT_CONNECT_ACK && mRole.load() == PORT_NET_ROLE_CLIENT && payloadSize >= sizeof(ConnectAckPayload)) {
+    if (type == PKT_CONNECT_ACK) {
+        if (mRole.load() != PORT_NET_ROLE_CLIENT || mConnected.load()) return;
+        if (payloadSize < sizeof(ConnectAckPayload)) return;
         ConnectAckPayload ack;
         std::memcpy(&ack, payload, sizeof(ConnectAckPayload));
-        if (ack.accepted) {
+        if (ack.accepted && ack.assignedRole == (uint8_t)PORT_NET_ROLE_CLIENT &&
+            ack.mode >= PORT_NET_MODE_COOP && ack.mode <= PORT_NET_MODE_COSTAR) {
             mConnected.store(true);
             mMode.store(ack.mode);
             mLastPacketReceived = std::chrono::steady_clock::now();
@@ -167,43 +186,51 @@ void NetplayManager::handleIncomingPacket(const uint8_t* data, size_t size,
     }
 
     if (!mConnected.load() || srcIp != mPeerIp || srcPort != mPeerPort) return;
-    mLastPacketReceived = std::chrono::steady_clock::now();
 
-    if (hdr.type == PKT_PING && payloadSize >= sizeof(PingPongPayload)) {
+    if (type == PKT_PING && payloadSize >= sizeof(PingPongPayload)) {
+        mLastPacketReceived = std::chrono::steady_clock::now();
         PingPongPayload p;
         std::memcpy(&p, payload, sizeof(PingPongPayload));
         sendPacket(PKT_PONG, &p, sizeof(p), srcIp, srcPort);
-    } else if (hdr.type == PKT_PONG && payloadSize >= sizeof(PingPongPayload)) {
+    } else if (type == PKT_PONG && payloadSize >= sizeof(PingPongPayload)) {
+        mLastPacketReceived = std::chrono::steady_clock::now();
         PingPongPayload p;
         std::memcpy(&p, payload, sizeof(PingPongPayload));
-        int64_t rtt = getNowMs() - p.timestampMs;
+        int64_t rtt = getNowMs() - netReadLeI64((const uint8_t*)&p.timestampMs);
         mPingMs.store((int)std::max((int64_t)0, rtt));
-    } else if (hdr.type == PKT_COSTAR_STATE && payloadSize >= sizeof(PortPadState)) {
+    } else if (type == PKT_COSTAR_STATE && payloadSize >= sizeof(PortPadState)) {
+        mLastPacketReceived = std::chrono::steady_clock::now();
         PortPadState pad;
         std::memcpy(&pad, payload, sizeof(PortPadState));
         pad.connected = 1;
         port_input_set(1, &pad);
-    } else if (hdr.type == PKT_PLAYER_STATE && payloadSize >= sizeof(PortRemotePlayerState)) {
+    } else if (type == PKT_PLAYER_STATE && payloadSize >= sizeof(PortRemotePlayerState)) {
         PortRemotePlayerState pState;
         std::memcpy(&pState, payload, sizeof(PortRemotePlayerState));
-        std::lock_guard<std::mutex> lk(mMutex);
-        mLatestRemotePlayer = pState;
-        mLatestRemotePlayer.valid = 1;
-        mHasRemotePlayer = true;
-    } else if (hdr.type == PKT_EVENT && payloadSize >= sizeof(EventPayload)) {
+        if (pState.valid == 1) {
+            mLastPacketReceived = std::chrono::steady_clock::now();
+            std::lock_guard<std::mutex> lk(mMutex);
+            mLatestRemotePlayer = pState;
+            mHasRemotePlayer = true;
+        }
+    } else if (type == PKT_EVENT && payloadSize >= sizeof(EventPayload)) {
         EventPayload ev;
         std::memcpy(&ev, payload, sizeof(EventPayload));
-        char safeStage[sizeof(ev.stage) + 1] = {0};
-        std::memcpy(safeStage, ev.stage, sizeof(ev.stage));
-        std::lock_guard<std::mutex> lk(mMutex);
-        if (ev.eventType == 1) {
-            mPendingWarp = true;
-            mPendingWarpStage = safeStage;
-            mPendingWarpScenario = ev.scenario;
-        } else if (ev.eventType == 2) {
-            mPendingSpin = true;
+        if (ev.eventType == 1 || ev.eventType == 2) {
+            mLastPacketReceived = std::chrono::steady_clock::now();
+            char safeStage[sizeof(ev.stage) + 1] = {0};
+            std::memcpy(safeStage, ev.stage, sizeof(ev.stage));
+            std::lock_guard<std::mutex> lk(mMutex);
+            if (ev.eventType == 1) {
+                mPendingWarp = true;
+                mPendingWarpStage = safeStage;
+                mPendingWarpScenario = netReadLeI32((const uint8_t*)&ev.scenario);
+            } else if (ev.eventType == 2) {
+                mPendingSpin = true;
+            }
         }
-    } else if (hdr.type == PKT_DISCONNECT) {
+    } else if (type == PKT_DISCONNECT) {
+        mLastPacketReceived = std::chrono::steady_clock::now();
         PORT_LOG("NetplayManager: disconnect from peer %s:%d\n", srcIp.c_str(), srcPort);
         disconnect(false);
     }

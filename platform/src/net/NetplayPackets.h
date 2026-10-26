@@ -60,3 +60,33 @@ struct EventPayload {
 };
 
 #pragma pack(pop)
+
+inline uint16_t netReadLe16(const uint8_t* p) {
+    return (uint16_t)p[0] | ((uint16_t)p[1] << 8);
+}
+inline uint32_t netReadLe32(const uint8_t* p) {
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+inline int32_t netReadLeI32(const uint8_t* p) {
+    return (int32_t)netReadLe32(p);
+}
+inline int64_t netReadLeI64(const uint8_t* p) {
+    uint32_t low = netReadLe32(p);
+    uint32_t high = netReadLe32(p + 4);
+    return (int64_t)((uint64_t)low | ((uint64_t)high << 32));
+}
+inline void netWriteLe16(uint8_t* p, uint16_t v) {
+    p[0] = (uint8_t)(v & 0xFF);
+    p[1] = (uint8_t)((v >> 8) & 0xFF);
+}
+inline void netWriteLe32(uint8_t* p, uint32_t v) {
+    p[0] = (uint8_t)(v & 0xFF);
+    p[1] = (uint8_t)((v >> 8) & 0xFF);
+    p[2] = (uint8_t)((v >> 16) & 0xFF);
+    p[3] = (uint8_t)((v >> 24) & 0xFF);
+}
+inline void netWriteLeI64(uint8_t* p, int64_t v) {
+    netWriteLe32(p, (uint32_t)(v & 0xFFFFFFFF));
+    netWriteLe32(p + 4, (uint32_t)(((uint64_t)v >> 32) & 0xFFFFFFFF));
+}
+
