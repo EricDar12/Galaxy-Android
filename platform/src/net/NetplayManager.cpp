@@ -60,23 +60,30 @@ void NetplayManager::update() {
 bool NetplayManager::startHost(int port, int mode, const std::string& roomName) {
     disconnect();
 
-    mHostPort = (port > 0) ? port : kDefaultPort;
+    int hostPort = (port > 0) ? port : kDefaultPort;
+    std::string room = roomName.empty() ? "Galaxy Room" : roomName;
+    {
+        std::lock_guard<std::mutex> lk(mMutex);
+        mHostPort = hostPort;
+        mRoomName = room;
+    }
     mMode.store(mode);
-    mRoomName = roomName.empty() ? "Galaxy Room" : roomName;
 
-    if (mDiscoverySocket.getPort() == mHostPort) {
+    if (mDiscoverySocket.getPort() == hostPort) {
         mDiscoverySocket.close();
     }
 
-    if (!mSocket.open(mHostPort, true)) {
-        PORT_LOG("NetplayManager: failed host port %d, retrying ephemeral\n", mHostPort);
+    if (!mSocket.open(hostPort, true)) {
+        PORT_LOG("NetplayManager: failed host port %d, retrying ephemeral\n", hostPort);
         if (!mSocket.open(0, true)) return false;
-        mHostPort = mSocket.getPort();
+        hostPort = mSocket.getPort();
+        std::lock_guard<std::mutex> lk(mMutex);
+        mHostPort = hostPort;
     }
 
     mRole.store(PORT_NET_ROLE_HOST);
     mConnected.store(false);
-    PORT_LOG("NetplayManager: hosting '%s' on %d (mode=%d)\n", mRoomName.c_str(), mHostPort, mode);
+    PORT_LOG("NetplayManager: hosting '%s' on %d (mode=%d)\n", room.c_str(), hostPort, mode);
     return true;
 }
 
@@ -89,8 +96,7 @@ bool NetplayManager::connectTo(const std::string& ip, int port) {
         return false;
     }
 
-    mPeerIp = ip;
-    mPeerPort = targetPort;
+    setPeer(ip, targetPort);
     mRole.store(PORT_NET_ROLE_CLIENT);
     mConnected.store(false);
 
@@ -99,14 +105,15 @@ bool NetplayManager::connectTo(const std::string& ip, int port) {
     std::strncpy(req.playerName, "Player 2", sizeof(req.playerName) - 1);
     req.preferredMode = (uint8_t)mMode.load();
 
-    sendPacket(PKT_CONNECT_REQ, &req, sizeof(req), mPeerIp, mPeerPort);
+    sendPacket(PKT_CONNECT_REQ, &req, sizeof(req), ip, targetPort);
     PORT_LOG("NetplayManager: sent connect request to %s:%d\n", ip.c_str(), targetPort);
     return true;
 }
 
 void NetplayManager::disconnect(bool stopHosting) {
-    if (mRole.load() != PORT_NET_ROLE_NONE && !mPeerIp.empty() && mPeerPort > 0) {
-        sendPacket(PKT_DISCONNECT, nullptr, 0, mPeerIp, mPeerPort);
+    Peer peer = peerSnapshot();
+    if (mRole.load() != PORT_NET_ROLE_NONE && !peer.ip.empty() && peer.port > 0) {
+        sendPacket(PKT_DISCONNECT, nullptr, 0, peer.ip, peer.port);
     }
 
     PortPadState zeroPad;
@@ -118,8 +125,7 @@ void NetplayManager::disconnect(bool stopHosting) {
         mRole.store(PORT_NET_ROLE_NONE);
     }
     mConnected.store(false);
-    mPeerIp.clear();
-    mPeerPort = 0;
+    setPeer(std::string(), 0);
     mPingMs.store(0);
 
     std::lock_guard<std::mutex> lk(mMutex);
@@ -128,8 +134,7 @@ void NetplayManager::disconnect(bool stopHosting) {
 }
 
 std::string NetplayManager::getPeerIp() const {
-    std::lock_guard<std::mutex> lk(mMutex);
-    return mPeerIp;
+    return peerSnapshot().ip;
 }
 
 std::string NetplayManager::getLocalIp() const {
@@ -146,8 +151,9 @@ int NetplayManager::getLanHosts(PortLanHostInfo* outHosts, int maxHosts) {
 }
 
 void NetplayManager::sendPlayerState(const PortRemotePlayerState& state) {
-    if (!mConnected.load() || mPeerIp.empty() || mPeerPort <= 0) return;
-    sendPacket(PKT_PLAYER_STATE, &state, sizeof(state), mPeerIp, mPeerPort);
+    Peer peer = peerSnapshot();
+    if (!mConnected.load() || peer.ip.empty() || peer.port <= 0) return;
+    sendPacket(PKT_PLAYER_STATE, &state, sizeof(state), peer.ip, peer.port);
 }
 
 bool NetplayManager::getRemotePlayerState(PortRemotePlayerState& outState) {
@@ -158,26 +164,29 @@ bool NetplayManager::getRemotePlayerState(PortRemotePlayerState& outState) {
 }
 
 void NetplayManager::sendCostarState(const PortPadState& pad) {
-    if (!mConnected.load() || mPeerIp.empty() || mPeerPort <= 0) return;
-    sendPacket(PKT_COSTAR_STATE, &pad, sizeof(pad), mPeerIp, mPeerPort);
+    Peer peer = peerSnapshot();
+    if (!mConnected.load() || peer.ip.empty() || peer.port <= 0) return;
+    sendPacket(PKT_COSTAR_STATE, &pad, sizeof(pad), peer.ip, peer.port);
 }
 
 void NetplayManager::sendWarpEvent(const std::string& stage, int scenario) {
-    if (!mConnected.load() || mPeerIp.empty() || mPeerPort <= 0) return;
+    Peer peer = peerSnapshot();
+    if (!mConnected.load() || peer.ip.empty() || peer.port <= 0) return;
     EventPayload ev;
     std::memset(&ev, 0, sizeof(ev));
     ev.eventType = 1;
     std::strncpy(ev.stage, stage.c_str(), sizeof(ev.stage) - 1);
     ev.scenario = scenario;
-    sendPacket(PKT_EVENT, &ev, sizeof(ev), mPeerIp, mPeerPort);
+    sendPacket(PKT_EVENT, &ev, sizeof(ev), peer.ip, peer.port);
 }
 
 void NetplayManager::sendSpinEvent() {
-    if (!mConnected.load() || mPeerIp.empty() || mPeerPort <= 0) return;
+    Peer peer = peerSnapshot();
+    if (!mConnected.load() || peer.ip.empty() || peer.port <= 0) return;
     EventPayload ev;
     std::memset(&ev, 0, sizeof(ev));
     ev.eventType = 2;
-    sendPacket(PKT_EVENT, &ev, sizeof(ev), mPeerIp, mPeerPort);
+    sendPacket(PKT_EVENT, &ev, sizeof(ev), peer.ip, peer.port);
 }
 
 bool NetplayManager::takeWarpEvent(std::string& outStage, int& outScenario) {
@@ -194,4 +203,25 @@ bool NetplayManager::takeSpinEvent() {
     if (!mPendingSpin) return false;
     mPendingSpin = false;
     return true;
+}
+
+NetplayManager::Peer NetplayManager::peerSnapshot() const {
+    std::lock_guard<std::mutex> lk(mMutex);
+    return Peer{mPeerIp, mPeerPort};
+}
+
+void NetplayManager::setPeer(const std::string& ip, int port) {
+    std::lock_guard<std::mutex> lk(mMutex);
+    mPeerIp = ip;
+    mPeerPort = port;
+}
+
+std::string NetplayManager::roomName() const {
+    std::lock_guard<std::mutex> lk(mMutex);
+    return mRoomName;
+}
+
+int NetplayManager::hostPort() const {
+    std::lock_guard<std::mutex> lk(mMutex);
+    return mHostPort;
 }

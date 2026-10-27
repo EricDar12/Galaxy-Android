@@ -13,6 +13,11 @@
 
 class NetplayManager {
 public:
+    struct Peer {
+        std::string ip;
+        int port{0};
+    };
+
     static NetplayManager& get();
 
     void init();
@@ -53,6 +58,13 @@ private:
     void workerLoop();
     void sendPacket(uint8_t type, const void* payload, size_t payloadSize,
                     const std::string& destIp, int destPort);
+
+    // mPeerIp/mPeerPort/mRoomName/mHostPort are shared between the game thread
+    // and the RX worker; touch them only through these helpers.
+    Peer peerSnapshot() const;
+    void setPeer(const std::string& ip, int port);
+    std::string roomName() const;
+    int hostPort() const;
 
     NetSocket mSocket;
     NetSocket mDiscoverySocket;

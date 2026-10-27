@@ -43,12 +43,13 @@ void NetplayManager::workerLoop() {
                 mLastBeaconSent = now;
                 BeaconPayload b;
                 std::memset(&b, 0, sizeof(b));
-                std::strncpy(b.roomName, mRoomName.c_str(), sizeof(b.roomName) - 1);
+                std::string name = roomName();
+                std::strncpy(b.roomName, name.c_str(), sizeof(b.roomName) - 1);
                 b.mode = (uint8_t)mMode.load();
                 std::strncpy(b.stage, "Galaxy", sizeof(b.stage) - 1);
                 b.scenario = 1;
                 b.playerCount = mConnected.load() ? 2 : 1;
-                b.port = (uint16_t)mHostPort;
+                b.port = (uint16_t)hostPort();
 
                 uint8_t bBuf[sizeof(PacketHeader) + sizeof(BeaconPayload)];
                 netWriteLe32(bBuf, kNetMagic);
@@ -60,16 +61,17 @@ void NetplayManager::workerLoop() {
             }
         }
 
-        if (mConnected.load() && !mPeerIp.empty() && mPeerPort > 0) {
+        Peer peer = peerSnapshot();
+        if (mConnected.load() && !peer.ip.empty() && peer.port > 0) {
             if (std::chrono::duration_cast<std::chrono::milliseconds>(now - mLastPingSent).count() >= 1000) {
                 mLastPingSent = now;
                 PingPongPayload p;
                 p.timestampMs = getNowMs();
-                sendPacket(PKT_PING, &p, sizeof(p), mPeerIp, mPeerPort);
+                sendPacket(PKT_PING, &p, sizeof(p), peer.ip, peer.port);
             }
 
             if (std::chrono::duration_cast<std::chrono::milliseconds>(now - mLastPacketReceived).count() >= 5000) {
-                PORT_LOG("NetplayManager: peer %s:%d timed out\n", mPeerIp.c_str(), mPeerPort);
+                PORT_LOG("NetplayManager: peer %s:%d timed out\n", peer.ip.c_str(), peer.port);
                 disconnect(false);
             }
         }
@@ -154,8 +156,7 @@ void NetplayManager::handleIncomingPacket(const uint8_t* data, size_t size,
         if (req.preferredMode < PORT_NET_MODE_COOP || req.preferredMode > PORT_NET_MODE_COSTAR) return;
         if (req.playerName[0] == '\0') return;
 
-        mPeerIp = srcIp;
-        mPeerPort = srcPort;
+        setPeer(srcIp, srcPort);
         mConnected.store(true);
         mLastPacketReceived = std::chrono::steady_clock::now();
 
@@ -163,7 +164,8 @@ void NetplayManager::handleIncomingPacket(const uint8_t* data, size_t size,
         ack.accepted = 1;
         ack.assignedRole = (uint8_t)PORT_NET_ROLE_CLIENT;
         ack.mode = (uint8_t)mMode.load();
-        std::strncpy(ack.hostName, mRoomName.c_str(), sizeof(ack.hostName) - 1);
+        std::string name = roomName();
+        std::strncpy(ack.hostName, name.c_str(), sizeof(ack.hostName) - 1);
         ack.hostName[sizeof(ack.hostName) - 1] = '\0';
         sendPacket(PKT_CONNECT_ACK, &ack, sizeof(ack), srcIp, srcPort);
         PORT_LOG("NetplayManager: accepted client %s:%d\n", srcIp.c_str(), srcPort);
@@ -185,7 +187,8 @@ void NetplayManager::handleIncomingPacket(const uint8_t* data, size_t size,
         return;
     }
 
-    if (!mConnected.load() || srcIp != mPeerIp || srcPort != mPeerPort) return;
+    Peer peer = peerSnapshot();
+    if (!mConnected.load() || srcIp != peer.ip || srcPort != peer.port) return;
 
     if (type == PKT_PING && payloadSize >= sizeof(PingPongPayload)) {
         mLastPacketReceived = std::chrono::steady_clock::now();
