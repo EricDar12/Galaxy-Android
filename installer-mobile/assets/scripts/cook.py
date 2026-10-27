@@ -18,7 +18,6 @@ import concurrent.futures
 import multiprocessing
 import os
 import shutil
-import struct
 import sys
 import time
 
@@ -26,114 +25,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 
-from rarc import yaz0_decompress  # noqa: E402
-import bcsv  # noqa: E402
-import bmg  # noqa: E402
+# The per-format converters and the archive walkers live in cook_archive.py.
+from cook_archive import cook_archive, cook_blob, cook_dol_data, cook_rarc  # noqa: E402
 import collision  # noqa: E402
 import dol_data  # noqa: E402
-import j3d  # noqa: E402
-import jaudio  # noqa: E402
-import jpa  # noqa: E402
-import kcl  # noqa: E402
-import lyt  # noqa: E402
 import rarc_swap  # noqa: E402
 import thp  # noqa: E402
-from util import sw32  # noqa: E402
-
-TEXT_EXT = {'.txt', '.ini', '.csv', '.csv#', '.xnim', '.dtp', '.dck'}
-UNUSED_EXT = {'.dvmat', '.dvw', '.prj', '.backup', '.bgrv', '.dat', '.gst', '.bin'}
-BCSV_EXT = {'.bcsv', '.pa', '.bcam', '.banmt', '.tbl'}
-
-
-def cook_blob(path, b, stats):
-    """Converts one file's bytes (bytearray) in place; returns it."""
-    name = path.rsplit('/', 1)[-1].lower()
-    ext = os.path.splitext(name)[1]
-    magic = bytes(b[:4])
-
-    if magic == b'J3D2':
-        j3d.swap_model(b)
-        kind = 'j3d-model'
-    elif magic == b'J3D1':
-        j3d.swap_anim(b)
-        kind = 'j3d-anim'
-    elif ext == '.kcl' and kcl.looks_like_kcl(b):
-        kcl.swap_kcl(b)
-        kind = 'kcl'
-    elif ext == '.bas':
-        j3d.swap_sound_anim(b, 0)
-        kind = 'bas'
-    elif magic == b'RLYT':
-        lyt.swap_rlyt(b)
-        kind = 'rlyt'
-    elif magic == b'RLAN':
-        lyt.swap_rlan(b)
-        kind = 'rlan'
-    elif magic == b'RFNT':
-        lyt.swap_rfnt(b)
-        kind = 'rfnt'
-    elif magic == b'MESG':
-        bmg.swap_bmg(b)
-        kind = 'bmg'
-    elif ext == '.tpl' and struct.unpack_from('>I', b, 0)[0] == lyt.TPL_VERSION:
-        lyt.swap_tpl(b)
-        kind = 'tpl'
-    elif ext == '.bti':
-        lyt.swap_timg(b)
-        kind = 'bti'
-    elif magic == b'ANDO':
-        sw32(b, 8, (len(b) - 8) // 4)
-        kind = 'canm'
-    elif magic == b'JPAC':
-        jpa.swap_jpc(b)
-        kind = 'jpc'
-    elif magic == b'AA_<':
-        jaudio.swap_baa(b)
-        kind = 'baa'
-    elif ext == '.cit':
-        jaudio.swap_cit(b)
-        kind = 'cit'
-    elif ext == '.bmt' and magic != b'J3D2':
-        jaudio.swap_me_table(b)
-        kind = 'me-table'
-    elif ext == '.bme':
-        jaudio.swap_me_seq(b)
-        kind = 'me-seq'
-    elif ext == '.brs':
-        jaudio.swap_words(b)
-        kind = 'remix'
-    elif ext == '.bct':
-        jaudio.swap_spk_table(b)
-        kind = 'spk-table'
-    elif ext == '.csw':
-        jaudio.swap_spk_wave(b)
-        kind = 'spk-wave'
-    elif ext == '.ast' and magic == b'STRM':
-        jaudio.swap_ast(b)
-        kind = 'ast'
-    elif (ext in BCSV_EXT or ext == '' or ext[1:].isdigit()) and bcsv.looks_like_bcsv(b):
-        bcsv.swap(b)
-        kind = 'bcsv'
-    elif ext in TEXT_EXT or name == 'collisionversion':
-        kind = 'text'
-    elif ext in UNUSED_EXT:
-        kind = 'raw' + ext
-    else:
-        kind = 'UNKNOWN' + (ext or ':' + magic.hex())
-    stats[kind] += 1
-    return b
-
-
-def is_converted_kind(stats_before, stats_after):
-    """True if the last cook_blob call converted something (not text/raw/unknown)."""
-    for k in stats_after:
-        if stats_after[k] != stats_before.get(k, 0):
-            return not (k == 'text' or k.startswith('raw') or k.startswith('UNKNOWN'))
-    return False
-
-
-
-from cook_archive import cook_rarc, cook_archive, cook_dol_data
 
 
 def plan(data_dir, out_dir, args):
@@ -167,6 +64,25 @@ def plan(data_dir, out_dir, args):
                 mode = 'copy'
             jobs.append((src, dst, mode))
     return jobs
+
+
+def mark_install_failed(out_dir, errors):
+    """Records that this cook did not finish, in the live output folder.
+
+    The launchers refuse a directory holding .install_failed, and they accept a
+    directory holding .installed_ok without looking at the files, so both marks
+    have to move together: a tree that was only half replaced, or a retry that
+    left an older .installed_ok behind, would otherwise boot straight into
+    missing or mismatched data."""
+    try:
+        os.makedirs(out_dir, exist_ok=True)
+        ok = os.path.join(out_dir, '.installed_ok')
+        if os.path.isfile(ok):
+            os.remove(ok)
+        with open(os.path.join(out_dir, '.install_failed'), 'w', encoding='utf-8') as f:
+            f.write('\n'.join(errors[:20]))
+    except OSError:
+        pass
 
 
 def convert(data_dir, out_dir, jobs=None, only=None, no_audio=False,
@@ -204,6 +120,9 @@ def convert(data_dir, out_dir, jobs=None, only=None, no_audio=False,
                         os.path.join(staging, 'sys', 'fst.bin'))
         errors = cook_dol_data(args.data_dir, staging)
         if errors:
+            # Nothing has been written outside the staging directory yet, so the
+            # live tree keeps whatever markers it had: the source disc is wrong,
+            # not the data already installed.
             print('[Engine] Conversion failed: %s' % errors[0])
             return 1
 
@@ -241,18 +160,13 @@ def convert(data_dir, out_dir, jobs=None, only=None, no_audio=False,
             print('[Engine] Conversion failed with %d error(s):' % len(errors))
             for e in errors[:20]:
                 print('  [Error]', e)
-            try:
-                os.makedirs(args.out_dir, exist_ok=True)
-                fail_path = os.path.join(args.out_dir, '.install_failed')
-                with open(fail_path, 'w', encoding='utf-8') as f:
-                    f.write('\n'.join(errors[:20]))
-            except OSError:
-                pass
+            mark_install_failed(args.out_dir, errors)
             return 1
         # Fail closed: never report success without the core converted output,
         # and never promote a partial tree over the live game data.
         if not os.path.isfile(os.path.join(staging, 'sys', 'fst.bin')):
             print('[Engine] Conversion failed: sys/fst.bin missing from the staged output')
+            mark_install_failed(args.out_dir, ['the conversion produced no sys/fst.bin'])
             return 1
         try:
             promote(staging, args.out_dir)
@@ -267,6 +181,9 @@ def convert(data_dir, out_dir, jobs=None, only=None, no_audio=False,
                 pass
         except OSError as e:
             print('[Engine] Could not move converted data into %s: %s' % (args.out_dir, e))
+            # promote() moves file by file, so the live tree is now a mixture of
+            # the old install and this one, however far the move got.
+            mark_install_failed(args.out_dir, ['moving the converted data into %s failed: %s' % (args.out_dir, e)])
             return 1
     finally:
         if staging is not None:

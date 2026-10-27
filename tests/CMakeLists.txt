@@ -113,8 +113,10 @@ add_test(NAME heap_alignment COMMAND heap_alignment_test)
 
 add_executable(save_sync_test
   test_save_sync.cpp
+  test_save_sync_export.cpp
   ${CMAKE_SOURCE_DIR}/platform/mobile/ui/SaveStorage.cpp
   ${CMAKE_SOURCE_DIR}/platform/mobile/ui/SaveSyncManager.cpp
+  ${CMAKE_SOURCE_DIR}/platform/mobile/ui/SaveSyncManagerStage.cpp
   ${CMAKE_SOURCE_DIR}/platform/mobile/ui/DolphinSaveConverter.cpp
 )
 target_include_directories(save_sync_test PRIVATE ${CMAKE_SOURCE_DIR}/platform/mobile/ui)
@@ -140,6 +142,7 @@ add_test(NAME wstring_format COMMAND wstring_format_test)
 
 add_executable(netplay_test
   test_netplay.cpp
+  test_netplay_packets.cpp
   ${CMAKE_SOURCE_DIR}/platform/src/net/NetSocket.cpp
   ${CMAKE_SOURCE_DIR}/platform/src/net/NetplayPackets.cpp
   ${CMAKE_SOURCE_DIR}/platform/src/net/NetplayManager.cpp
@@ -174,6 +177,28 @@ target_include_directories(controller_mapping_test PRIVATE
   ${CMAKE_SOURCE_DIR}/platform/mobile
 )
 add_test(NAME controller_mapping COMMAND controller_mapping_test)
+
+add_executable(viewport_bounds_test
+  test_viewport_bounds.cpp
+  ${CMAKE_SOURCE_DIR}/platform/mobile/display/ViewportManager.cpp
+)
+target_include_directories(viewport_bounds_test PRIVATE
+  ${CMAKE_SOURCE_DIR}/platform/mobile/display
+)
+add_test(NAME viewport_bounds COMMAND viewport_bounds_test)
+
+add_executable(mario_state_test
+  test_mario_state.cpp
+  ${CMAKE_SOURCE_DIR}/platform/src/port/port_mario_state.cpp
+  ${CMAKE_SOURCE_DIR}/platform/mobile/ui/SaveStorage.cpp
+  ${CMAKE_SOURCE_DIR}/platform/mobile/ui/DolphinSaveConverter.cpp
+)
+target_include_directories(mario_state_test PRIVATE
+  ${CMAKE_SOURCE_DIR}/platform/include
+  ${CMAKE_SOURCE_DIR}/platform
+  ${CMAKE_SOURCE_DIR}/platform/mobile/ui
+)
+add_test(NAME mario_state COMMAND mario_state_test)
 
 # Run under CTest without depending on which libstdc++ happens to be first on
 # PATH; an older MSYS2 runtime can lack symbols the compiler emits.

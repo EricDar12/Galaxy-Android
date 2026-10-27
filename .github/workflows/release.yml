@@ -21,14 +21,41 @@ permissions:
 jobs:
   build-android:
     name: Build Android APKs
+    # The tag that was actually built and signed, re-read by the release job so
+    # the published name always matches the artifact and the dispatch input never
+    # reaches a second shell line.
+    outputs:
+      tag: ${{ steps.source.outputs.TAG }}
     runs-on: ubuntu-22.04
     permissions:
       contents: read
     steps:
+      # The dispatch input used to be pasted straight into a shell line, and it
+      # also selects the source that gets built and signed.  It reaches the step
+      # through the environment now, and the pattern below - kept equal to
+      # tools/release_tag.py by test_release_tag.py - refuses anything but a plain
+      # v-prefixed tag before it can reach the checkout ref or $GITHUB_OUTPUT.
+      # This is the one step that runs before the checkout, so it cannot call the
+      # script itself.
+      - name: Resolve release tag
+        id: source
+        env:
+          REQUESTED_TAG: ${{ github.event.inputs.tag_name }}
+        shell: python
+        run: |
+          import os, re, sys
+          tag = os.environ['REQUESTED_TAG'] if os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch' \
+              else os.environ['GITHUB_REF_NAME']
+          if not re.fullmatch(r'v[A-Za-z0-9._-]+', tag or ''):
+              sys.exit('REFUSING TO RELEASE: %r is not a v-prefixed tag name' % tag)
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+              output.write('TAG=%s\n' % tag)
+          print('Building and releasing %s' % tag)
+
       - name: Checkout Source Code
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with:
-          ref: ${{ github.event.inputs.tag_name || github.ref }}
+          ref: refs/tags/${{ steps.source.outputs.TAG }}
           submodules: recursive
           persist-credentials: false
 
@@ -79,12 +106,18 @@ jobs:
                      guest_memory_test guest_reserve_linux_test timing_pacing_test \
                      settings_persistence_test thp_bounds_test heap_alignment_test \
                      save_sync_test dolphin_converter_test wstring_format_test netplay_test \
-                     vk_texture_staging_test controller_mapping_test
+                     vk_texture_staging_test controller_mapping_test \
+                     viewport_bounds_test mario_state_test
           ctest --test-dir build-host --output-on-failure
 
       - name: Build Native Game Engine (libgame.so)
+        # The NDK path comes in through the environment rather than being pasted
+        # into the script text, the same way the release tag is handled: it is an
+        # action output, not a user input, but a path containing a shell metacharacter
+        # would still execute here, and it does not execute as an env assignment.
+        env:
+          NDK_DIR: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
-          NDK_DIR="${{ steps.setup-ndk.outputs.ndk-path }}"
           if [ -z "$NDK_DIR" ] || [ ! -d "$NDK_DIR" ]; then
             if [ -d "/usr/local/lib/android/sdk/ndk/25.2.9519653" ]; then
               NDK_DIR="/usr/local/lib/android/sdk/ndk/25.2.9519653"
@@ -107,7 +140,10 @@ jobs:
             -DANDROID_PLATFORM=android-30 \
             -DTARGET_MOBILE=ON \
             -DCMAKE_BUILD_TYPE=Release
-          ninja -C build-mobile game main reserve installer
+          # vk_inventory_test cannot run here (no headset in CI) but it links
+          # against the engine, so building it catches the drift that a
+          # device-only test otherwise rots into.
+          ninja -C build-mobile game main reserve installer vk_inventory_test
 
       - name: Require pinned signing certificate
         env:
@@ -131,13 +167,13 @@ jobs:
           # a sideload tester build (prerelease) and never a store production upload.
           GALAXY_RELEASE_CHANNEL: 'tester'
           GALAXY_ALLOW_DEBUGGABLE: '1'
+          NDK_DIR: ${{ steps.setup-ndk.outputs.ndk-path }}
           GALAXY_KEYSTORE_B64: ${{ secrets.GALAXY_KEYSTORE_B64 }}
           GALAXY_KEYSTORE_PASS: ${{ secrets.GALAXY_KEYSTORE_PASS }}
           GALAXY_KEY_ALIAS: ${{ secrets.GALAXY_KEY_ALIAS }}
           GALAXY_EXPECTED_SIGNER_SHA256: ${{ vars.GALAXY_EXPECTED_SIGNER_SHA256 }}
         run: |
           mkdir -p out-mobile
-          NDK_DIR="${{ steps.setup-ndk.outputs.ndk-path }}"
           if [ -z "$NDK_DIR" ] || [ ! -d "$NDK_DIR" ]; then
             if [ -d "/usr/local/lib/android/sdk/ndk/25.2.9519653" ]; then
               NDK_DIR="/usr/local/lib/android/sdk/ndk/25.2.9519653"
@@ -209,23 +245,24 @@ jobs:
 
       - name: Determine Release Tag
         id: vars
+        env:
+          BUILT_TAG: ${{ needs.build-android.outputs.tag }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "TAG_NAME=${{ github.event.inputs.tag_name }}" >> $GITHUB_OUTPUT
-          else
-            echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-          fi
+          # Checked with the same rule the build job used, and quoted rather than
+          # interpolated: an empty or damaged value here would otherwise make
+          # softprops/action-gh-release publish under the run's own ref.
+          python3 tools/release_tag.py --tag "$BUILT_TAG" --output "$GITHUB_OUTPUT"
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2
         with:
-          tag_name: ${{ steps.vars.outputs.TAG_NAME }}
-          name: Galaxy Android ${{ steps.vars.outputs.TAG_NAME }} (Sideload Tester)
+          tag_name: ${{ steps.vars.outputs.TAG }}
+          name: Galaxy Android ${{ steps.vars.outputs.TAG }} (Sideload Tester)
           draft: false
           prerelease: true
           files: release-apks/*.apk
           body: |
-            ### Galaxy Android ${{ steps.vars.outputs.TAG_NAME }} (Sideload Tester)
+            ### Galaxy Android ${{ steps.vars.outputs.TAG }} (Sideload Tester)
             
             **100% Native ARM64 Android Port**
             

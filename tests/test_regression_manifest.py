@@ -194,6 +194,7 @@ class TestVulkanManifestAndApiVersionRequirements(unittest.TestCase):
         manifest_paths = [
             os.path.join(root, "platform", "mobile", "AndroidManifest.xml"),
             os.path.join(root, "platform", "mobile", "AndroidManifest_plus.xml"),
+            os.path.join(root, "platform", "mobile", "AndroidManifest.production.xml"),
             os.path.join(root, "platform", "android", "AndroidManifest.xml"),
         ]
         for path in manifest_paths:

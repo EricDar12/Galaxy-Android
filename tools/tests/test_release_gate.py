@@ -1,14 +1,21 @@
+import contextlib
 import io
 import os
+from pathlib import Path
+import sys
+import tempfile
 import unittest
 import zipfile
 from unittest import mock
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from release_fixtures import elf64, make_apk, write_apk  # noqa: E402
 
 from tools.apk_env import (
     COMPROMISED_KEY_SHA256, certificate_fingerprints, check_signer,
 )
 from tools.verify_release_apk import (
-    check_contents, check_entries, parse_debuggable,
+    check_archive, check_contents, check_entries, parse_debuggable,
     tester_debuggable_opt_in as _debuggable_opt_in,
 )
 
@@ -26,39 +33,6 @@ GOOD = [
 ]
 
 
-def elf64(machine=183):
-    header = bytearray(64)
-    header[0:4] = b"\x7fELF"
-    header[4] = 2
-    header[5] = 1
-    header[18:20] = machine.to_bytes(2, "little")
-    return bytes(header)
-
-
-def make_apk(**overrides):
-    payload = {
-        "AndroidManifest.xml": b"\x03\x00\x08\x00",
-        "classes.dex": b"dex\n035\x00" + b"\x00" * 64,
-        "assets/galaxy_shader_manifest.bin": b"manifest",
-        "lib/arm64-v8a/libgame.so": elf64(),
-        "lib/arm64-v8a/libmain.so": elf64(),
-        "lib/arm64-v8a/libreserve.so": elf64(),
-        "lib/arm64-v8a/libinstaller.so": elf64(),
-        "lib/arm64-v8a/wrap.sh": b"#!/system/bin/sh\nexec \"$0\"\n",
-    }
-    for name, data in overrides.items():
-        if data is None:
-            payload.pop(name, None)
-        else:
-            payload[name] = data
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w") as archive:
-        for name, data in payload.items():
-            archive.writestr(name, data)
-    buffer.seek(0)
-    return zipfile.ZipFile(buffer)
-
-
 class TestReleaseGate(unittest.TestCase):
     def test_complete_apk_has_no_problems(self):
         self.assertEqual(check_entries(GOOD), [])
@@ -66,6 +40,40 @@ class TestReleaseGate(unittest.TestCase):
     def test_complete_payload_has_no_problems(self):
         with make_apk() as apk:
             self.assertEqual(check_contents(apk), [])
+
+    def test_archive_checks_run_without_the_android_build_tools(self):
+        # The desktop installer builders have no SDK, but they still copy this
+        # APK into what players run, so the archive alone has to be checkable.
+        import tools.verify_release_apk as vr
+        with tempfile.TemporaryDirectory() as tmp:
+            apk = write_apk(os.path.join(tmp, "GalaxyQuest.apk"))
+            with mock.patch.object(vr, "APKSIGNER", ""), mock.patch.object(vr, "AAPT2", ""):
+                with contextlib.redirect_stdout(io.StringIO()) as out:
+                    self.assertEqual(vr.main(["--structure-only", apk]), 0)
+                self.assertIn("structure checks", out.getvalue())
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(vr.main([apk]), 1)
+
+    def test_structure_only_gate_refuses_a_foreign_payload(self):
+        import tools.verify_release_apk as vr
+        with tempfile.TemporaryDirectory() as tmp:
+            apk = write_apk(os.path.join(tmp, "other.apk"),
+                            **{"classes.dex": b"PK\x03\x04" + b"\x00" * 64,
+                               "lib/arm64-v8a/libgame.so": None})
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(vr.main(["--structure-only", apk]), 1)
+            report = out.getvalue()
+            self.assertIn("missing lib/arm64-v8a/libgame.so", report)
+            self.assertIn("classes.dex is not a Dalvik executable", report)
+
+    def test_unreadable_apk_is_a_reported_problem_not_a_crash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            truncated = os.path.join(tmp, "truncated.apk")
+            with open(truncated, "wb") as handle:
+                handle.write(b"PK\x03\x04" + b"\x00" * 30)
+            self.assertIn("cannot be read as an APK archive", check_archive(truncated)[0])
+            self.assertIn("cannot be read as an APK archive",
+                          check_archive(os.path.join(tmp, "absent.apk"))[0])
 
     def test_empty_native_library_is_reported(self):
         with make_apk(**{"lib/arm64-v8a/libgame.so": b""}) as apk:

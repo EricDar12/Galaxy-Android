@@ -1,95 +1,12 @@
-// Save import/export integrity: staged NAND writes, rollback on failure and
-// honest error reporting. Uses the real SaveSyncManager against temp dirs.
-#include "DolphinSaveConverter.h"
-#include "SaveStorage.h"
-#include "SaveSyncManager.h"
-#include "save_fixtures.h"
+// Save import integrity: staged NAND writes, rollback on failure and honest
+// error reporting. Uses the real SaveSyncManager against temp dirs. The export
+// and validation half runs from test_save_sync_export.cpp in the same binary.
+#include "save_sync_harness.h"
 
-#include <stdio.h>
-
-#include <filesystem>
-#include <fstream>
-#include <iterator>
-#include <string>
-#include <vector>
-
-#ifdef _WIN32
-#include <process.h>
-#define TEST_GETPID _getpid
-#else
-#include <unistd.h>
-#define TEST_GETPID getpid
-#endif
-
-namespace fs = std::filesystem;
-using mobile_ui::SaveIoPaths;
 using mobile_ui::SaveSyncManager;
 using mobile_ui::savefs::validateSaveDir;
 
 namespace {
-
-int failures = 0;
-
-void check(const char* name, bool ok, const std::string& detail = "") {
-    printf("%-56s %s%s%s\n", name, ok ? "OK" : "FAIL",
-           detail.empty() ? "" : " - ", detail.c_str());
-    if (!ok) ++failures;
-}
-
-bool writeFile(const fs::path& path, const std::vector<uint8_t>& data) {
-    std::ofstream out(path, std::ios::binary | std::ios::trunc);
-    out.write(reinterpret_cast<const char*>(data.data()),
-              static_cast<std::streamsize>(data.size()));
-    return out.good();
-}
-
-std::vector<uint8_t> readFile(const fs::path& path) {
-    std::ifstream in(path, std::ios::binary);
-    return std::vector<uint8_t>(std::istreambuf_iterator<char>(in),
-                                std::istreambuf_iterator<char>());
-}
-
-const char* const kTitles[] = {"524d4750", "524d4745", "524d474a", "524d474b"};
-const char* const kNames[] = {"GameData.bin", "save.bin"};
-
-struct Fixture {
-    fs::path root;
-    fs::path nand;
-    fs::path download;
-    fs::path dolphin;
-    fs::path mirror;
-    SaveIoPaths paths;
-    std::string savePath;
-
-    Fixture() {
-        root = fs::temp_directory_path() /
-               ("galaxy_save_sync_" + std::to_string(TEST_GETPID()) + "_" +
-                std::to_string(static_cast<unsigned long long>(::time(nullptr))));
-        fs::remove_all(root);
-        nand = root / "nand";
-        download = root / "Download";
-        dolphin = root / "dolphin";
-        mirror = root / "mirror";
-        fs::create_directories(nand);
-        paths.downloadDir = download.generic_string();
-        paths.dolphinDir = dolphin.generic_string();
-        paths.mirrorDir = mirror.generic_string();
-        savePath = (nand / "touch_settings.ini").generic_string();
-    }
-
-    ~Fixture() { std::error_code ec; fs::remove_all(root, ec); }
-
-    fs::path titleFile(const char* id, const char* name) const {
-        return nand / "title" / "00010000" / id / "data" / name;
-    }
-
-    bool hasLeftover(const std::string& marker) const {
-        for (const auto& entry : fs::recursive_directory_iterator(nand)) {
-            if (entry.path().filename().string().find(marker) != std::string::npos) return true;
-        }
-        return false;
-    }
-};
 
 void testImportWritesEveryCopy() {
     Fixture fixture;
@@ -162,6 +79,25 @@ void testBlockedStagingLeavesNandUntouched() {
 }
 #endif
 
+void testImportRecoversInterruptedPromotion() {
+    Fixture fixture;
+    const std::vector<uint8_t> previous = nativeSave(0x31);
+    fs::create_directories(fixture.titleFile("524d4750", "GameData.bin").parent_path());
+    writeFile(fixture.titleFile("524d4750", "GameData.bin"), previous);
+    fs::rename(fixture.titleFile("524d4750", "GameData.bin"),
+               fixture.titleFile("524d4750", "GameData.bin.import_rollback"));
+    fs::create_directories(fixture.nand / "import_staging" / "title");
+    writeFile(fixture.nand / "import_staging" / "title" / "partial.bin", nativeSave(0x99));
+
+    std::string message;
+    bool ok = SaveSyncManager::importSave(fixture.savePath, message, fixture.paths);
+    check("interrupted import reports no source", !ok, message);
+    check("interrupted import restores previous save",
+          readFile(fixture.titleFile("524d4750", "GameData.bin")) == previous);
+    check("recovery leaves no rollback files", !fixture.hasLeftover(".import_rollback"));
+    check("recovery removes interrupted staging", !fs::exists(fixture.nand / "import_staging"));
+}
+
 void testImportRejectsOversizedFile() {
     Fixture fixture;
     fs::create_directories(fixture.download);
@@ -186,78 +122,6 @@ void testImportConvertsDolphinSave() {
     check("Dolphin import reports conversion", message.find("Dolphin") != std::string::npos, message);
 }
 
-void testExportWritesVerifiedCopies() {
-    Fixture fixture;
-    const std::vector<uint8_t> sample = nativeSave(0x77);
-    fs::create_directories(fixture.titleFile("524d4750", "GameData.bin").parent_path());
-    writeFile(fixture.titleFile("524d4750", "GameData.bin"), sample);
-
-    std::string message;
-    bool ok = SaveSyncManager::exportSave(fixture.savePath, message, fixture.paths);
-    check("export succeeds", ok, message);
-    check("export writes GalaxyAndroid_save.bin",
-          readFile(fixture.download / "GalaxyAndroid_save.bin") == sample);
-    check("export writes GameData.bin", readFile(fixture.download / "GameData.bin") == sample);
-
-    std::vector<uint8_t> converted;
-    mobile_ui::DolphinSaveConverter::convertNativeToDolphin(
-        sample.data(), sample.size(), converted);
-    check("export writes Dolphin save",
-          readFile(fixture.download / "GameData_Dolphin.bin") == converted);
-}
-
-void testExportReportsWriteFailure() {
-    Fixture fixture;
-    const std::vector<uint8_t> sample = nativeSave(0x77);
-    fs::create_directories(fixture.titleFile("524d4750", "GameData.bin").parent_path());
-    writeFile(fixture.titleFile("524d4750", "GameData.bin"), sample);
-    // A file where the download directory belongs forces every write to fail.
-    fixture.paths.downloadDir = (fixture.root / "blocked").generic_string();
-    writeFile(fixture.root / "blocked", sample);
-
-    std::string message;
-    bool ok = SaveSyncManager::exportSave(fixture.savePath, message, fixture.paths);
-    check("export reports unwritable destination", !ok, message);
-    check("export failure is explicit", message.find("failed") != std::string::npos ||
-                                             message.find("Could not") != std::string::npos,
-          message);
-}
-
-void testImportRecoversInterruptedPromotion() {
-    Fixture fixture;
-    const std::vector<uint8_t> previous = nativeSave(0x31);
-    fs::create_directories(fixture.titleFile("524d4750", "GameData.bin").parent_path());
-    writeFile(fixture.titleFile("524d4750", "GameData.bin"), previous);
-    fs::rename(fixture.titleFile("524d4750", "GameData.bin"),
-               fixture.titleFile("524d4750", "GameData.bin.import_rollback"));
-    fs::create_directories(fixture.nand / "import_staging" / "title");
-    writeFile(fixture.nand / "import_staging" / "title" / "partial.bin", nativeSave(0x99));
-
-    std::string message;
-    bool ok = SaveSyncManager::importSave(fixture.savePath, message, fixture.paths);
-    check("interrupted import reports no source", !ok, message);
-    check("interrupted import restores previous save",
-          readFile(fixture.titleFile("524d4750", "GameData.bin")) == previous);
-    check("recovery leaves no rollback files", !fixture.hasLeftover(".import_rollback"));
-    check("recovery removes interrupted staging", !fs::exists(fixture.nand / "import_staging"));
-}
-
-void testExportRecoversInterruptedPromotion() {
-    Fixture fixture;
-    const std::vector<uint8_t> current = nativeSave(0x42);
-    fs::create_directories(fixture.titleFile("524d4750", "GameData.bin").parent_path());
-    writeFile(fixture.titleFile("524d4750", "GameData.bin"), current);
-    writeFile(fixture.titleFile("524d4750", "GameData.bin.import_rollback"),
-              nativeSave(0x11));
-
-    std::string message;
-    bool ok = SaveSyncManager::exportSave(fixture.savePath, message, fixture.paths);
-    check("export after interrupted promotion succeeds", ok, message);
-    check("export keeps the promoted save",
-          readFile(fixture.download / "GameData.bin") == current);
-    check("export clears stale rollback files", !fixture.hasLeftover(".import_rollback"));
-}
-
 void testImportRejectsCorruptChecksum() {
     Fixture fixture;
     fs::create_directories(fixture.download);
@@ -276,6 +140,32 @@ void testImportRejectsCorruptChecksum() {
     check("corrupt Dolphin import writes nothing", !fs::exists(fixture.nand / "title"));
 }
 
+// The quick-save position snapshot belongs to the save it was taken from; an
+// import must not leave it behind to reposition the newly imported game.
+void testImportDropsStalePositionSnapshot() {
+    Fixture fixture;
+    fs::create_directories(fixture.download);
+    writeFile(fixture.download / "GameData.bin", nativeSave(0x5a));
+    const fs::path snapshot =
+        fixture.titleFile("524d4750", "GameData.bin").parent_path() / "mario_state.bin";
+    fs::create_directories(snapshot.parent_path());
+    writeFile(snapshot, std::vector<uint8_t>(100, 0x7b));
+
+    std::string message;
+    bool ok = SaveSyncManager::importSave(fixture.savePath, message, fixture.paths);
+    check("import over a stale snapshot succeeds", ok, message);
+    check("import drops the stale snapshot", !fs::exists(snapshot));
+
+    // A refused import changes nothing, so the live snapshot has to survive.
+    writeFile(snapshot, std::vector<uint8_t>(100, 0x7b));
+    std::vector<uint8_t> corrupt = nativeSave(0x5a);
+    corrupt[0x200] ^= 0xFF;
+    writeFile(fixture.download / "GameData.bin", corrupt);
+    message.clear();
+    ok = SaveSyncManager::importSave(fixture.savePath, message, fixture.paths);
+    check("refused import keeps the live snapshot", !ok && fs::exists(snapshot), message);
+}
+
 }  // namespace
 
 int main() {
@@ -286,12 +176,11 @@ int main() {
     testBlockedStagingLeavesNandUntouched();
 #endif
     testImportRecoversInterruptedPromotion();
-    testExportRecoversInterruptedPromotion();
     testImportRejectsOversizedFile();
     testImportConvertsDolphinSave();
     testImportRejectsCorruptChecksum();
-    testExportWritesVerifiedCopies();
-    testExportReportsWriteFailure();
+    testImportDropsStalePositionSnapshot();
+    runSaveSyncExportChecks();
 
     printf("%s (%d failures)\n", failures ? "FAILED" : "PASSED", failures);
     return failures ? 1 : 0;

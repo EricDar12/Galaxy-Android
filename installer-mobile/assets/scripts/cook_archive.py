@@ -1,10 +1,110 @@
 import os
 import collections
-import rarc_swap
+import struct
+import bcsv
+import bmg
 import collision
 import dol_data
-import bcsv
-from cook import cook_blob, is_converted_kind, yaz0_decompress
+import j3d
+import jaudio
+import jpa
+import kcl
+import lyt
+import rarc_swap
+from rarc import yaz0_decompress
+from util import sw32
+
+TEXT_EXT = {'.txt', '.ini', '.csv', '.csv#', '.xnim', '.dtp', '.dck'}
+UNUSED_EXT = {'.dvmat', '.dvw', '.prj', '.backup', '.bgrv', '.dat', '.gst', '.bin'}
+BCSV_EXT = {'.bcsv', '.pa', '.bcam', '.banmt', '.tbl'}
+
+
+def cook_blob(path, b, stats):
+    """Converts one file's bytes (bytearray) in place; returns it."""
+    name = path.rsplit('/', 1)[-1].lower()
+    ext = os.path.splitext(name)[1]
+    magic = bytes(b[:4])
+
+    if magic == b'J3D2':
+        j3d.swap_model(b)
+        kind = 'j3d-model'
+    elif magic == b'J3D1':
+        j3d.swap_anim(b)
+        kind = 'j3d-anim'
+    elif ext == '.kcl' and kcl.looks_like_kcl(b):
+        kcl.swap_kcl(b)
+        kind = 'kcl'
+    elif ext == '.bas':
+        j3d.swap_sound_anim(b, 0)
+        kind = 'bas'
+    elif magic == b'RLYT':
+        lyt.swap_rlyt(b)
+        kind = 'rlyt'
+    elif magic == b'RLAN':
+        lyt.swap_rlan(b)
+        kind = 'rlan'
+    elif magic == b'RFNT':
+        lyt.swap_rfnt(b)
+        kind = 'rfnt'
+    elif magic == b'MESG':
+        bmg.swap_bmg(b)
+        kind = 'bmg'
+    elif ext == '.tpl' and struct.unpack_from('>I', b, 0)[0] == lyt.TPL_VERSION:
+        lyt.swap_tpl(b)
+        kind = 'tpl'
+    elif ext == '.bti':
+        lyt.swap_timg(b)
+        kind = 'bti'
+    elif magic == b'ANDO':
+        sw32(b, 8, (len(b) - 8) // 4)
+        kind = 'canm'
+    elif magic == b'JPAC':
+        jpa.swap_jpc(b)
+        kind = 'jpc'
+    elif magic == b'AA_<':
+        jaudio.swap_baa(b)
+        kind = 'baa'
+    elif ext == '.cit':
+        jaudio.swap_cit(b)
+        kind = 'cit'
+    elif ext == '.bmt' and magic != b'J3D2':
+        jaudio.swap_me_table(b)
+        kind = 'me-table'
+    elif ext == '.bme':
+        jaudio.swap_me_seq(b)
+        kind = 'me-seq'
+    elif ext == '.brs':
+        jaudio.swap_words(b)
+        kind = 'remix'
+    elif ext == '.bct':
+        jaudio.swap_spk_table(b)
+        kind = 'spk-table'
+    elif ext == '.csw':
+        jaudio.swap_spk_wave(b)
+        kind = 'spk-wave'
+    elif ext == '.ast' and magic == b'STRM':
+        jaudio.swap_ast(b)
+        kind = 'ast'
+    elif (ext in BCSV_EXT or ext == '' or ext[1:].isdigit()) and bcsv.looks_like_bcsv(b):
+        bcsv.swap(b)
+        kind = 'bcsv'
+    elif ext in TEXT_EXT or name == 'collisionversion':
+        kind = 'text'
+    elif ext in UNUSED_EXT:
+        kind = 'raw' + ext
+    else:
+        kind = 'UNKNOWN' + (ext or ':' + magic.hex())
+    stats[kind] += 1
+    return b
+
+
+def is_converted_kind(stats_before, stats_after):
+    """True if the last cook_blob call converted something (not text/raw/unknown)."""
+    for k in stats_after:
+        if stats_after[k] != stats_before.get(k, 0):
+            return not (k == 'text' or k.startswith('raw') or k.startswith('UNKNOWN'))
+    return False
+
 
 def cook_rarc(data, stats, replace=None):
     """Converts a (decompressed, big-endian) RARC; nested compressed files that
