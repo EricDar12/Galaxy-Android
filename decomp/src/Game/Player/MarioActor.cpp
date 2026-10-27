@@ -44,6 +44,7 @@
 #include "Game/Util/ObjUtil.hpp"
 #include "Game/Util/PlayerUtil.hpp"
 #include "Game/Util/GamePadUtil.hpp"
+#include "Game/Util/SceneUtil.hpp"
 #include "Game/Util/ScreenUtil.hpp"
 #include "Game/Util/SoundUtil.hpp"
 #include "Game/Util/StarPointerUtil.hpp"
@@ -1064,6 +1065,35 @@ void MarioActor::control() {
     static TVec3f sSaveFront(0.0f, 0.0f, 1.0f);
     static s32 sSaveHealth = 3;
     static bool sHasSavestate = false;
+    static bool sAttemptedDiskRestore = false;
+
+    if (!sAttemptedDiskRestore) {
+        sAttemptedDiskRestore = true;
+        char diskStage[48]{};
+        float diskPos[3]{}, diskVel[3]{}, diskFront[3]{};
+        int diskHealth = 3;
+        if (port_load_mario_state(diskStage, sizeof(diskStage), diskPos, diskVel, diskFront, &diskHealth)) {
+            const char* curStage = MR::getCurrentStageName();
+            if (curStage && strcmp(diskStage, curStage) == 0) {
+                sSavePos.set(diskPos[0], diskPos[1], diskPos[2]);
+                sSaveVel.set(diskVel[0], diskVel[1], diskVel[2]);
+                sSaveFront.set(diskFront[0], diskFront[1], diskFront[2]);
+                sSaveHealth = diskHealth;
+                sHasSavestate = true;
+                mPosition = sSavePos;
+                mVelocity = sSaveVel;
+                _294 = sSavePos;
+                _270 = sSavePos;
+                if (mMario) {
+                    mMario->mPosition = sSavePos;
+                    mMario->mVelocity = sSaveVel;
+                    mMario->mVelocityAfter = sSaveVel;
+                    mMario->mFrontVec = sSaveFront;
+                }
+                mHealth = sSaveHealth;
+            }
+        }
+    }
 
     if (port_check_savestate_save()) {
         sSavePos = mPosition;
@@ -1071,35 +1101,56 @@ void MarioActor::control() {
         sSaveFront = mMario ? mMario->mFrontVec : TVec3f(0.0f, 0.0f, 1.0f);
         sSaveHealth = mHealth;
         sHasSavestate = true;
-        MR::startSystemSE("SE_SY_STAR_RESULT_COIN");
-    } else if (port_check_savestate_load() && sHasSavestate) {
-        mPosition = sSavePos;
-        mVelocity = sSaveVel;
-        _294 = sSavePos;
-        _270 = sSavePos;
-        mScale.set(TVec3f(1.0f, 1.0f, 1.0f));
-        _F44 = true;
-        _482 = false;
-        _A6E = 0;
-        MR::showPlayer();
-        _388 = 0;
-        if (mMario) {
-            mMario->mPosition = sSavePos;
-            mMario->mVelocity = sSaveVel;
-            mMario->mVelocityAfter = sSaveVel;
-            mMario->mAirGravityVec.zero();
-            mMario->mMovementStates._3C = false;
-            mMario->mMovementStates._1 = false;
-            mMario->mFrontVec = sSaveFront;
-            mMario->mJumpVec.zero();
-            mMario->stopJump();
-            mMario->stopWalk();
-            mMario->changeAnimationNonStop("Wait");
+        const char* curStage = MR::getCurrentStageName();
+        if (curStage) {
+            float p[3] = {mPosition.x, mPosition.y, mPosition.z};
+            float v[3] = {mVelocity.x, mVelocity.y, mVelocity.z};
+            float f[3] = {sSaveFront.x, sSaveFront.y, sSaveFront.z};
+            port_save_mario_state(curStage, p, v, f, mHealth);
         }
-        mHealth = sSaveHealth;
-        MR::activateDefaultGameLayout();
-        setNerve(GET_NERVE(MarioActor, MarioActorNrvWait));
-        MR::startSystemSE("SE_SY_WARP_IN");
+        MR::startSystemSE("SE_SY_STAR_RESULT_COIN");
+    } else if (port_check_savestate_load()) {
+        if (!sHasSavestate) {
+            char diskStage[48]{};
+            float diskPos[3]{}, diskVel[3]{}, diskFront[3]{};
+            int diskHealth = 3;
+            if (port_load_mario_state(diskStage, sizeof(diskStage), diskPos, diskVel, diskFront, &diskHealth)) {
+                sSavePos.set(diskPos[0], diskPos[1], diskPos[2]);
+                sSaveVel.set(diskVel[0], diskVel[1], diskVel[2]);
+                sSaveFront.set(diskFront[0], diskFront[1], diskFront[2]);
+                sSaveHealth = diskHealth;
+                sHasSavestate = true;
+            }
+        }
+        if (sHasSavestate) {
+            mPosition = sSavePos;
+            mVelocity = sSaveVel;
+            _294 = sSavePos;
+            _270 = sSavePos;
+            mScale.set(TVec3f(1.0f, 1.0f, 1.0f));
+            _F44 = true;
+            _482 = false;
+            _A6E = 0;
+            MR::showPlayer();
+            _388 = 0;
+            if (mMario) {
+                mMario->mPosition = sSavePos;
+                mMario->mVelocity = sSaveVel;
+                mMario->mVelocityAfter = sSaveVel;
+                mMario->mAirGravityVec.zero();
+                mMario->mMovementStates._3C = false;
+                mMario->mMovementStates._1 = false;
+                mMario->mFrontVec = sSaveFront;
+                mMario->mJumpVec.zero();
+                mMario->stopJump();
+                mMario->stopWalk();
+                mMario->changeAnimationNonStop("Wait");
+            }
+            mHealth = sSaveHealth;
+            MR::activateDefaultGameLayout();
+            setNerve(GET_NERVE(MarioActor, MarioActorNrvWait));
+            MR::startSystemSE("SE_SY_WARP_IN");
+        }
     }
 
 

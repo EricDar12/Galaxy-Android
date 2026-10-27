@@ -14,6 +14,8 @@
 
 extern "C" void port_trigger_quick_save(void);
 extern "C" void port_trigger_quick_load(int slot);
+extern "C" void port_trigger_savestate_save(void);
+extern "C" void port_trigger_savestate_load(void);
 extern "C" uint64_t port_get_save_generation(void);
 extern "C" int port_is_save_in_progress(void);
 extern "C" void port_android_vibrate(int ms);
@@ -24,6 +26,7 @@ SaveManager::SaveManager() = default;
 
 std::string SaveManager::triggerSaveAnywhere(bool haptics) {
     if (mPendingSaveSlot >= 0) return "A save is already in progress!";
+    port_trigger_savestate_save();
     port_trigger_quick_save();
     mPendingSaveSlot = 0;
     mPendingSaveStartGen = port_get_save_generation();
@@ -36,6 +39,7 @@ std::string SaveManager::triggerSaveAnywhere(bool haptics) {
 std::string SaveManager::triggerSaveSlot(int slot, bool haptics) {
     if (slot < 1 || slot > 4) return "Invalid save slot!";
     if (mPendingSaveSlot >= 0) return "A save is already in progress!";
+    port_trigger_savestate_save();
     port_trigger_quick_save();
     mPendingSaveSlot = slot;
     mPendingSaveStartGen = port_get_save_generation();
@@ -92,6 +96,7 @@ std::string SaveManager::triggerLoadSlot(int slot, bool haptics) {
     }
 
     savefs::removeDirRecursive(replaced);
+    port_trigger_savestate_load();
     port_trigger_quick_load(slot);
     if (haptics) port_android_vibrate(75);
     char msg[64];

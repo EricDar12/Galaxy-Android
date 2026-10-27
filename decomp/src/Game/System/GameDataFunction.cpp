@@ -16,15 +16,18 @@
 
 namespace {
     SaveDataHandleSequence* getSaveDataHandleSequence() NO_INLINE {
-        return SingletonHolder< GameSystem >::get()->mSequenceDirector->mSaveDataHandleSequence;
+        GameSystem* sys = SingletonHolder< GameSystem >::get();
+        return (sys && sys->mSequenceDirector) ? sys->mSequenceDirector->mSaveDataHandleSequence : nullptr;
     }
 
     GameDataTemporaryInGalaxy* getGameDataTemporaryInGalaxy() {
-        return SingletonHolder< GameSystem >::get()->mSequenceDirector->mGameDataTemporaryInGalaxy;
+        GameSystem* sys = SingletonHolder< GameSystem >::get();
+        return (sys && sys->mSequenceDirector) ? sys->mSequenceDirector->mGameDataTemporaryInGalaxy : nullptr;
     }
 
     GameSequenceProgress* getGameSequenceProgress() NO_INLINE {
-        return SingletonHolder< GameSystem >::get()->mSequenceDirector->mGameSequenceProgress;
+        GameSystem* sys = SingletonHolder< GameSystem >::get();
+        return (sys && sys->mSequenceDirector) ? sys->mSequenceDirector->mGameSequenceProgress : nullptr;
     }
 };  // namespace
 
@@ -304,57 +307,83 @@ namespace GameDataFunction {
     }
 
     void resetGameDataGoToGalaxyFirst() {
-        ::getGameDataTemporaryInGalaxy()->resetRaceBestTime();
-        ::getGameDataTemporaryInGalaxy()->resetPlayerRestartIdInfo();
-        ::getGameDataTemporaryInGalaxy()->_4 = false;
-        ::getGameDataTemporaryInGalaxy()->clearAlreadyDoneFlag();
-        ::getGameDataTemporaryInGalaxy()->resetStageResultStarPieceParam();
-        ::getGameDataTemporaryInGalaxy()->resetStageResultCoinParam();
+        GameDataTemporaryInGalaxy* t = ::getGameDataTemporaryInGalaxy();
+        if (t) {
+            t->resetRaceBestTime();
+            t->resetPlayerRestartIdInfo();
+            t->_4 = false;
+            t->clearAlreadyDoneFlag();
+            t->resetStageResultStarPieceParam();
+            t->resetStageResultCoinParam();
+        }
     }
 
     void resetGameDataGoToGalaxyRetry() {
-        ::getGameDataTemporaryInGalaxy()->resetRaceBestTime();
-        ::getGameDataTemporaryInGalaxy()->_4 = true;
+        GameDataTemporaryInGalaxy* t = ::getGameDataTemporaryInGalaxy();
+        if (t) {
+            t->resetRaceBestTime();
+            t->_4 = true;
+        }
     }
 
     void onCompleteEndingCurrentPlayer() {
-        ::getSaveDataHandleSequence()->getCurrentUserFile()->onCompleteEndingCurrentPlayer();
+        SaveDataHandleSequence* seq = ::getSaveDataHandleSequence();
+        if (seq && seq->getCurrentUserFile()) {
+            seq->getCurrentUserFile()->onCompleteEndingCurrentPlayer();
+        }
     }
 
     bool isOnCompleteEndingMarioAndLuigi() {
-        return ::getSaveDataHandleSequence()->getCurrentUserFile()->isOnCompleteEndingMarioAndLuigi();
+        SaveDataHandleSequence* seq = ::getSaveDataHandleSequence();
+        return (seq && seq->getCurrentUserFile()) ? seq->getCurrentUserFile()->isOnCompleteEndingMarioAndLuigi() : false;
     }
 
     OSTime getSysConfigFileTimeAnnounced() {
-        return ::getSaveDataHandleSequence()->getSysConfigFile()->getTimeAnnounced();
+        SaveDataHandleSequence* seq = ::getSaveDataHandleSequence();
+        return (seq && seq->getSysConfigFile()) ? seq->getSysConfigFile()->getTimeAnnounced() : 0;
     }
 
     void updateSysConfigFileTimeAnnounced() {
-        ::getSaveDataHandleSequence()->getSysConfigFile()->updateTimeAnnounced();
+        SaveDataHandleSequence* seq = ::getSaveDataHandleSequence();
+        if (seq && seq->getSysConfigFile()) {
+            seq->getSysConfigFile()->updateTimeAnnounced();
+        }
     }
 
     OSTime getSysConfigFileTimeSent() {
-        return ::getSaveDataHandleSequence()->getSysConfigFile()->getTimeSent();
+        SaveDataHandleSequence* seq = ::getSaveDataHandleSequence();
+        return (seq && seq->getSysConfigFile()) ? seq->getSysConfigFile()->getTimeSent() : 0;
     }
 
     void setSysConfigFileTimeSent(OSTime timeSent) {
-        ::getSaveDataHandleSequence()->getSysConfigFile()->setTimeSent(timeSent);
+        SaveDataHandleSequence* seq = ::getSaveDataHandleSequence();
+        if (seq && seq->getSysConfigFile()) {
+            seq->getSysConfigFile()->setTimeSent(timeSent);
+        }
     }
 
     u32 getSysConfigFileSentBytes() {
-        return ::getSaveDataHandleSequence()->getSysConfigFile()->getSentBytes();
+        SaveDataHandleSequence* seq = ::getSaveDataHandleSequence();
+        return (seq && seq->getSysConfigFile()) ? seq->getSysConfigFile()->getSentBytes() : 0;
     }
 
     void setSysConfigFileSentBytes(u32 sentBytes) {
-        ::getSaveDataHandleSequence()->getSysConfigFile()->setSentBytes(sentBytes);
+        SaveDataHandleSequence* seq = ::getSaveDataHandleSequence();
+        if (seq && seq->getSysConfigFile()) {
+            seq->getSysConfigFile()->setSentBytes(sentBytes);
+        }
     }
 
     bool isLuigiLeftSupply() {
-        return ::getGameSequenceProgress()->isLuigiLeftSupply();
+        GameSequenceProgress* p = ::getGameSequenceProgress();
+        return p ? p->isLuigiLeftSupply() : false;
     }
 
     void offLuigiLeftSupply() {
-        ::getGameSequenceProgress()->offLuigiLeftSupply();
+        GameSequenceProgress* p = ::getGameSequenceProgress();
+        if (p) {
+            p->offLuigiLeftSupply();
+        }
     }
 
     bool isOnGameEventFlagNormalComet(const char* pGalaxyName) {

@@ -196,6 +196,9 @@ void port_trigger_quick_save(void);
 int port_check_quick_save_request(void);
 void port_trigger_quick_load(int slot);
 int port_check_quick_load_request(int* slot);
+void port_save_mario_state(const char* stage, const float pos[3], const float vel[3], const float front[3], int health);
+int port_load_mario_state(char* stageOut, size_t maxLen, float posOut[3], float velOut[3], float frontOut[3], int* healthOut);
+void port_clear_mario_state(void);
 int64_t port_host_time_ns(void);
 void port_host_sleep_ns(int64_t ns);
 // Delivers pending interrupts (a safe point; only from the thread holding the

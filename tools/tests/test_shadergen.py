@@ -79,20 +79,20 @@ class ShaderGeneratorTests(unittest.TestCase):
     def test_af_none_does_not_attenuate(self):
         """GX_AF_NONE leaves lighting unattenuated."""
         src = self.shader(AF_NONE)
-        self.assertIn('(dist > 0.0 && false)', src)
-        self.assertNotIn('float a = (dist > 0.0 && true)', src)
+        self.assertIn('float a = 1.0;', src)
+        self.assertNotIn('float cosAttn =', src)
 
     def test_af_spec_attenuates_specular(self):
         """GX_AF_SPEC computes distance/specular attenuation."""
         src = self.shader(AF_SPEC)
-        self.assertIn('float a = (dist > 0.0 && true)', src)
-        self.assertIn('(dist > 0.0 && false) ? max(0.0, dot(ldir, -lvec))', src)
+        self.assertIn('max(0.0, dot(nrm, ldir))', src)
+        self.assertIn('vec3 cosPoly = vec3(1.0, cosAttn, cosAttn * cosAttn);', src)
 
     def test_af_spot_still_attenuates(self):
         """Spot and distance attenuation keep working for GX_AF_SPOT/GX_AF_DIST."""
         src = self.shader(AF_SPOT)
-        self.assertIn('max(0.0, dot(ldir, -lvec))', src)
-        self.assertIn('float a = (dist > 0.0 && true)', src)
+        self.assertIn('max(0.0, dot(ldir, lvec))', src)
+        self.assertIn('dot(vec3(1.0, dist, d2), fetch_st(b + 2u).xyz)', src)
 
     def test_diffuse_is_never_gated_on_the_specular_angle(self):
         """AF_NONE and AF_SPOT do not gate on the specular angle."""

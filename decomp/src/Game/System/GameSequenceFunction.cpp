@@ -29,19 +29,23 @@ namespace {
     }
 
     GameSequenceProgress* getGameSequenceProgress() NO_INLINE {
-        return SingletonHolder< GameSystem >::get()->mSequenceDirector->mGameSequenceProgress;
+        GameSystem* sys = SingletonHolder< GameSystem >::get();
+        return (sys && sys->mSequenceDirector) ? sys->mSequenceDirector->mGameSequenceProgress : nullptr;
     }
 
     SaveDataHandleSequence* getSaveDataHandleSequence() NO_INLINE {
-        return SingletonHolder< GameSystem >::get()->mSequenceDirector->mSaveDataHandleSequence;
+        GameSystem* sys = SingletonHolder< GameSystem >::get();
+        return (sys && sys->mSequenceDirector) ? sys->mSequenceDirector->mSaveDataHandleSequence : nullptr;
     }
 
     GameDataTemporaryInGalaxy* getGameDataTemporaryInGalaxy() {
-        return SingletonHolder< GameSystem >::get()->mSequenceDirector->mGameDataTemporaryInGalaxy;
+        GameSystem* sys = SingletonHolder< GameSystem >::get();
+        return (sys && sys->mSequenceDirector) ? sys->mSequenceDirector->mGameDataTemporaryInGalaxy : nullptr;
     }
 
     NWC24Messenger* getNWC24Messenger() NO_INLINE {
-        return SingletonHolder< GameSystem >::get()->mSequenceDirector->mNWC24Messenger;
+        GameSystem* sys = SingletonHolder< GameSystem >::get();
+        return (sys && sys->mSequenceDirector) ? sys->mSequenceDirector->mNWC24Messenger : nullptr;
     }
 };  // namespace
 

@@ -138,7 +138,7 @@ void Builder::emitDraw(u32 prim, u32 flags, u32 first, u32 count, u32& ordinal) 
     bool fullscreen = it.vp[0] <= 1.0f && it.vp[1] <= 1.0f && it.vp[2] >= (float)nativeW - 2.0f && it.vp[3] >= (float)nativeH - 2.0f;
     it.useVr = perspective && fullscreen && !inHud && cam.valid;
     float p1 = bitsToFloat(xfRegs[0x21]);
-    it.hudSafe = inHud && !perspective && (fabsf(p1) < 0.5f);
+    it.hudSafe = inHud && !perspective && (fabsf(p1) < 0.5f) && !fullscreen;
 
     if (uidDirty || flags != lastUidFlags || inHud != lastUidHud) {
         ShaderUid uid = makeShaderUid(bp, xfRegs, flags, inHud);

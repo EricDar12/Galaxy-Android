@@ -17,6 +17,7 @@ static std::string sNandRoot;
 static const char kHomeDir[] = "/title/00010000/524d4750/data";
 
 extern "C" void port_nand_set_root(const char* root) { sNandRoot = root; }
+extern "C" const char* port_nand_get_root(void) { return sNandRoot.c_str(); }
 
 static std::string hostPath(const char* path) {
     PortHostAllocScope scope;

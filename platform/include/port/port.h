@@ -187,6 +187,9 @@ void port_trigger_savestate_load(void);
 int port_check_savestate_save(void);
 int port_check_savestate_load(void);
 int port_savestate_has_data(void);
+void port_save_mario_state(const char* stage, const float pos[3], const float vel[3], const float front[3], int health);
+int port_load_mario_state(char* stageOut, size_t maxLen, float posOut[3], float velOut[3], float frontOut[3], int* healthOut);
+void port_clear_mario_state(void);
 
 int port_is_speedrun_hud_enabled(void);
 void port_set_speedrun_hud_enabled(int enabled);

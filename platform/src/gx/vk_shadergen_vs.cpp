@@ -117,10 +117,16 @@ std::string genVulkanVertexShader(const ShaderUid& u) {
                 o.w("      float d2 = dot(d, d);\n");
                 o.w("      float dist = sqrt(max(d2, 1e-6));\n");
                 o.w("      vec3 lvec = d / dist;\n");
-                o.w("      float cosAttn = (dist > 0.0 && %s) ? max(0.0, dot(ldir, -lvec)) : 1.0;\n", spot ? "true" : "false");
-                o.w("      vec4 k = fetch_st(b + 1u);\n");
-                o.w("      float a = (dist > 0.0 && %s) ? clamp(dot(vec3(1.0, cosAttn, cosAttn * cosAttn), k.xyz) / max(dot(vec3(1.0, dist, d2), fetch_st(b + 2u).xyz), 1e-6), 0.0, 1.0) : 1.0;\n",
-                    atten ? "true" : "false");
+                if (!atten) {
+                    o.w("      float a = 1.0;\n");
+                } else if (!spot) {
+                    o.w("      float cosAttn = (dot(nrm, lvec) >= 0.0) ? max(0.0, dot(nrm, ldir)) : 0.0;\n");
+                    o.w("      vec3 cosPoly = vec3(1.0, cosAttn, cosAttn * cosAttn);\n");
+                    o.w("      float a = clamp(dot(cosPoly, fetch_st(b + 1u).xyz) / max(dot(cosPoly, fetch_st(b + 2u).xyz), 1e-6), 0.0, 1.0);\n");
+                } else {
+                    o.w("      float cosAttn = max(0.0, dot(ldir, lvec));\n");
+                    o.w("      float a = clamp(dot(vec3(1.0, cosAttn, cosAttn * cosAttn), fetch_st(b + 1u).xyz) / max(dot(vec3(1.0, dist, d2), fetch_st(b + 2u).xyz), 1e-6), 0.0, 1.0);\n");
+                }
                 if (diffuse == 0) {
                     o.w("      float illum = 1.0;\n");
                 } else if (diffuse == 1) {

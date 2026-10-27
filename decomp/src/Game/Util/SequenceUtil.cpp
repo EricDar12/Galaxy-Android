@@ -25,10 +25,12 @@ namespace MR {
     }
 
     void requestChangeStageAfterStageClear() {
+        port_clear_mario_state();
         GameSequenceFunction::requestGalaxyMove(GalaxyMoveArgument(4, nullptr, 1, nullptr));
     }
 
     void requestChangeStageAfterMiss() {
+        port_clear_mario_state();
         JMapIdInfo info = *getPlayerRestartIdInfo();
 
         if (isGalaxyAnyCometAppearInCurrentStage()) {
@@ -53,6 +55,7 @@ namespace MR {
     }
 
     void requestChangeSceneAfterGameOver() {
+        port_clear_mario_state();
         resetSystemAndGameStatus();
         requestChangeSceneTitle();
     }
@@ -62,6 +65,7 @@ namespace MR {
     }
 
     void requestChangeStageGoBackAstroDome() {
+        port_clear_mario_state();
         GameSequenceFunction::requestGalaxyMove(GalaxyMoveArgument(3, nullptr, 1, nullptr));
     }
 
