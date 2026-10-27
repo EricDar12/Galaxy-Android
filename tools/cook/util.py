@@ -27,6 +27,11 @@ def _swap_block(chunk, width):
 
 def sw16(b, o, n=1):
     """Swaps n consecutive 16-bit values starting at o (clipped to the buffer)."""
+    if o < 0:
+        # A negative offset is nonsense for a table the file describes, and
+        # slicing would wrap it onto the tail of the buffer and swap bytes that
+        # belong to something else.
+        return
     n = min(n, (len(b) - o) // 2)
     if n > 0:
         b[o:o + 2 * n] = _swap_block(b[o:o + 2 * n], 2)
@@ -34,6 +39,8 @@ def sw16(b, o, n=1):
 
 def sw32(b, o, n=1):
     """Swaps n consecutive 32-bit values starting at o (clipped to the buffer)."""
+    if o < 0:
+        return
     n = min(n, (len(b) - o) // 4)
     if n > 0:
         b[o:o + 4 * n] = _swap_block(b[o:o + 4 * n], 4)

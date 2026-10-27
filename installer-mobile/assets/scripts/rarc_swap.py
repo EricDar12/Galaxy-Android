@@ -17,19 +17,48 @@ FLAG_ARAM = 0x20
 FLAG_YAZ0 = 0x80
 
 
+def _tables(b):
+    """Locates the container's tables and checks that each one is inside the
+    archive, returning (data_start, ndirs, dir_off, nfiles, file_off, str_off)
+    with the offsets absolute.
+
+    Every one of them is a number stored in the file, and a slice that runs off
+    the end reads short instead of failing: the data section is then rebuilt
+    around the truncated blob and the archive comes out self-consistent but
+    missing its tail.  A damaged container has to stop the cook."""
+    if len(b) < 0x20:
+        raise ValueError('RARC archive is only %#x bytes' % len(b))
+    hdr = u32(b, 8)
+    if hdr < 0x20 or hdr + 0x20 > len(b):
+        raise ValueError('RARC info block at %#x is outside the archive (%#x bytes)' % (hdr, len(b)))
+    ndirs, dir_off, nfiles, file_off, _, str_off = (u32(b, hdr + 4 * i) for i in range(6))
+    data_start = hdr + u32(b, 0xC)
+    dir_off += hdr
+    file_off += hdr
+    str_off += hdr
+    if data_start > len(b):
+        raise ValueError('RARC data section at %#x is outside the archive (%#x bytes)' % (data_start, len(b)))
+    if ndirs < 1 or dir_off + 0x10 * ndirs > len(b):
+        raise ValueError('RARC directory table at %#x for %d entries is outside the archive (%#x bytes)'
+                         % (dir_off, ndirs, len(b)))
+    if file_off + 0x14 * nfiles > len(b):
+        raise ValueError('RARC file table at %#x for %d entries is outside the archive (%#x bytes)'
+                         % (file_off, nfiles, len(b)))
+    if str_off >= len(b):
+        raise ValueError('RARC string table at %#x is outside the archive (%#x bytes)' % (str_off, len(b)))
+    return data_start, ndirs, dir_off, nfiles, file_off, str_off
+
+
 def entries(b):
     """Yields (index, path, flags, data_offset, size) for every file entry."""
-    hdr = u32(b, 8)
-    data_start = hdr + u32(b, 0xC)
-    info = hdr
-    ndirs, dir_off, nfiles, file_off, _, str_off = (u32(b, info + 4 * i) for i in range(6))
-    dir_off += info
-    file_off += info
-    str_off += info
+    data_start, ndirs, dir_off, nfiles, file_off, str_off = _tables(b)
 
     def cstr(o):
-        end = b.index(b'\0', str_off + o)
-        return bytes(b[str_off + o:end]).decode('shift_jis', errors='replace')
+        start = str_off + o
+        if start >= len(b):
+            raise ValueError('RARC string at %#x is outside the archive (%#x bytes)' % (start, len(b)))
+        end = b.index(b'\0', start, len(b))
+        return bytes(b[start:end]).decode('shift_jis', errors='replace')
 
     dirs = []
     for i in range(ndirs):
@@ -42,6 +71,9 @@ def entries(b):
         if depth > 64:
             raise ValueError('RARC directory loop')
         name, count, first = dirs[di]
+        if first + count > nfiles:
+            raise ValueError('RARC directory %s lists file entries %d..%d past the table (%d entries)'
+                             % (prefix, first, first + count - 1, nfiles))
         for e in range(first, first + count):
             f = file_off + 0x14 * e
             word = u32(b, f + 4)
@@ -50,9 +82,17 @@ def entries(b):
             if flags & FLAG_FOLDER:
                 if ename in ('.', '..'):
                     continue
-                walk(u32(b, f + 8), prefix + ename + '/', depth + 1)
+                sub = u32(b, f + 8)
+                if sub >= ndirs:
+                    raise ValueError('RARC folder %s points at directory %d of %d' % (prefix + ename, sub, ndirs))
+                walk(sub, prefix + ename + '/', depth + 1)
             else:
-                out.append((e, prefix + ename, flags, data_start + u32(b, f + 8), u32(b, f + 0xC)))
+                off = data_start + u32(b, f + 8)
+                size = u32(b, f + 0xC)
+                if off + size > len(b):
+                    raise ValueError('RARC file %s at %#x+%#x runs past the archive (%#x bytes)'
+                                     % (prefix + ename, off, size, len(b)))
+                out.append((e, prefix + ename, flags, off, size))
 
     walk(0, dirs[0][0] + '/', 0)
     return out
@@ -62,16 +102,17 @@ def _relayout(b, repl):
     """Rebuilds the data section (big-endian tables) with replaced files.
     repl: {entry index: (bytes, flags)}.  Keeps the original file order so
     the MRAM/ARAM/DVD grouping JKRCompArchive relies on is preserved."""
-    hdr = u32(b, 8)
-    info = hdr
-    data_start = hdr + u32(b, 0xC)
-    nfiles, file_off = u32(b, info + 8), info + u32(b, info + 0xC)
+    data_start, ndirs, dir_off, nfiles, file_off, str_off = _tables(b)
     files = []
     for i in range(nfiles):
         f = file_off + 0x14 * i
         flags = u32(b, f + 4) >> 24
         if not flags & FLAG_FOLDER:
-            files.append((u32(b, f + 8), i, flags, u32(b, f + 0xC)))
+            off, size = u32(b, f + 8), u32(b, f + 0xC)
+            if data_start + off + size > len(b):
+                raise ValueError('RARC entry %d at %#x+%#x runs past the archive (%#x bytes)'
+                                 % (i, data_start + off, size, len(b)))
+            files.append((off, i, flags, size))
     files.sort()
     data = bytearray()
     placed = {}
@@ -126,20 +167,20 @@ def swap_rarc(b, cook_file):
     if repl:
         b = _relayout(b, repl)
 
+    data_start, ndirs, dir_off, nfiles, file_off, str_off = _tables(b)
     hdr = u32(b, 8)
     info = hdr
-    ndirs, dir_off, nfiles, file_off = (u32(b, info + 4 * i) for i in range(4))
     sw32(b, 0, 8)
     sw32(b, info, 6)
     sw16(b, info + 0x18, 2)
     sw32(b, info + 0x1C)
     for i in range(ndirs):
-        d = info + dir_off + 0x10 * i
+        d = dir_off + 0x10 * i
         sw32(b, d, 2)
         sw16(b, d + 8, 2)
         sw32(b, d + 0xC)
     for i in range(nfiles):
-        f = info + file_off + 0x14 * i
+        f = file_off + 0x14 * i
         sw16(b, f, 2)
         sw32(b, f + 4, 4)
     return b

@@ -18,6 +18,19 @@ warnings = cook_warnings.ThreadWarnings()
 DATA_SE, DATA_BGM, DATA_STREAM = 0x50, 0x60, 0x70
 
 
+def _span(count, base, stride, width, limit):
+    """The positions of the `count` `stride`-spaced, `width`-byte values that
+    start at `base` and still lie wholly inside `limit`.
+
+    Counts are stored in the archive, so a damaged one can ask for billions of
+    entries.  Iterating them is a hang -- the app runs the cooker inside
+    embedded Python, where a runaway loop has no watchdog to stop it -- and a
+    run that starts before the buffer would wrap onto its tail."""
+    if count <= 0 or base < 0 or base + width > limit:
+        return range(0)
+    return range(base, min(base + stride * (count - 1), limit - width) + 1, stride)
+
+
 class Swapper:
     """Swaps each 16/32-bit location at most once (records can be shared)."""
 
@@ -26,16 +39,14 @@ class Swapper:
         self.done = set()
 
     def w32(self, o, n=1):
-        for i in range(n):
-            p = o + 4 * i
-            if p not in self.done and p + 4 <= len(self.b):
+        for p in _span(n, o, 4, 4, len(self.b)):
+            if p not in self.done:
                 self.done.add(p)
                 sw32(self.b, p)
 
     def w16(self, o, n=1):
-        for i in range(n):
-            p = o + 2 * i
-            if p not in self.done and p + 2 <= len(self.b):
+        for p in _span(n, o, 2, 2, len(self.b)):
+            if p not in self.done:
                 self.done.add(p)
                 sw16(self.b, p)
 
@@ -189,8 +200,8 @@ def swap_me_table(b):
     """AudMePlayingParamsHolder: s32 count, entry offset, names offset;
     8-byte entries (u16 at +4); u32 name offsets."""
     n, entries, names = s32(b, 0), s32(b, 4), s32(b, 8)
-    for i in range(n):
-        sw16(b, entries + 8 * i + 4)
+    for e in _span(n, entries + 4, 8, 2, len(b)):
+        sw16(b, e)
     sw32(b, names, n)
     sw32(b, 0, 3)
     return b
@@ -212,8 +223,7 @@ def swap_spk_table(b):
     """SpkTable (.bct): s32 count, entry offset, names offset, initialized;
     8-byte SpkParameters (u16, u8, u8, u16, u16); u32 name offsets."""
     n, entries, names = s32(b, 0), s32(b, 4), s32(b, 8)
-    for i in range(n):
-        e = entries + 8 * i
+    for e in _span(n, entries, 8, 8, len(b)):
         sw16(b, e)
         sw16(b, e + 4, 2)
     sw32(b, names, n)

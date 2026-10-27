@@ -87,7 +87,10 @@ def swap_ibnk(b, base):
             warnings.append('ibnk effect %r' % tag)
 
     def velo_regions(p, count):
-        for _ in range(count):
+        # The regions are 16 bytes each and the count comes from the bank, so
+        # the run has to end at the buffer: a damaged count would otherwise
+        # iterate billions of clipped no-op swaps and never finish.
+        for _ in range(min(count, max((len(b) - p) // 16, 0))):
             s.w32(p + 4, 3)         # wave id (u32), volume, pitch; byte at +0 stays
             p += 16
         return p
