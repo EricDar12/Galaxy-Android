@@ -135,10 +135,6 @@ bool TouchInputHandler::handleTouch(const AInputEvent* event, PortPadState& pad,
     mBtnDpadLeft = mBtnDpadRight = mBtnDpadUp = mBtnDpadDown = false;
 
     ButtonLayout bl = layoutMgr.calculateButtonLayout(screenW, screenH, settings);
-    float aX = bl.ax, aY = bl.ay, aR = bl.ar;
-    float bX = bl.bx, bY = bl.by, bR = bl.br;
-    float spinX = bl.spinX, spinY = bl.spinY, spinR = bl.spinR;
-    float zX = bl.zx, zY = bl.zy, zR = bl.zr;
     float plusX = w - 65.0f * scale, plusY = 65.0f * scale, plusR = 34.0f * scale;
 
     float baseDpadX = settings.dpadOnRight ? (w - 140.0f * scale) : (130.0f * scale);

@@ -125,14 +125,19 @@ static BOOL __OSIsThreadActive(OSThread* thread) {
 
 s32 OSDisableScheduler(void) {
     BOOL enabled = OSDisableInterrupts();
-    s32 count = Reschedule++;
+    // Spelled out rather than Reschedule++: a compound increment of a volatile
+    // is deprecated in C++20, and the read-modify-write is already atomic here
+    // because interrupts are held off.
+    s32 count = Reschedule;
+    Reschedule = count + 1;
     OSRestoreInterrupts(enabled);
     return count;
 }
 
 s32 OSEnableScheduler(void) {
     BOOL enabled = OSDisableInterrupts();
-    s32 count = Reschedule--;
+    s32 count = Reschedule;
+    Reschedule = count - 1;
     OSRestoreInterrupts(enabled);
     return count;
 }

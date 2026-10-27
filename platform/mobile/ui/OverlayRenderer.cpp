@@ -34,7 +34,6 @@ void OverlayRenderer::generateVertices(int screenW, int screenH,
 
     float baseDpi = (float)screenH / 650.0f;
     float uiScale = baseDpi;
-    float w = (float)screenW;
 
     float drawerAnim = menuHandler.drawerAnim();
     float hudOp = settings.opacity * (1.0f - drawerAnim * 0.75f);

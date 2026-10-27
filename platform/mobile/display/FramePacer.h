@@ -23,7 +23,6 @@ public:
 
 private:
     int64_t mLastPresentNs = 0;
-    int mCurrentRefreshRate = 0;
 };
 
 }  // namespace mobile_display

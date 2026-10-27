@@ -176,8 +176,8 @@ void MobileApp::run(android_app* app, uintptr_t windowBase, size_t windowSize) {
 
     mAndroid = app;
     app->userData = this;
-    app->onAppCmd = [](android_app* a, int32_t cmd) { MobileApp::get().handleAppCmd(cmd); };
-    app->onInputEvent = [](android_app* a, AInputEvent* ev) -> int32_t { return MobileApp::get().handleInputEvent(ev); };
+    app->onAppCmd = [](android_app*, int32_t cmd) { MobileApp::get().handleAppCmd(cmd); };
+    app->onInputEvent = [](android_app*, AInputEvent* ev) -> int32_t { return MobileApp::get().handleInputEvent(ev); };
 
     mobile_input::Sensors::get().init(app);
     port_mem_set_reserved_window(windowBase, windowSize);

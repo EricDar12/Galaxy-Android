@@ -75,10 +75,13 @@ static void downloadAfc(Voice* v, s16* dst, u32 count) {
         count -= fromCache;
         if (!count) return;
 
-        if (count <= v->_74) {
+        // JASDSPInterface.hpp declares these byte counters as int while the loop
+        // counts in u32, so the comparison already converts _74 to unsigned; the
+        // cast only says so.
+        if (count <= (u32)v->_74) {
             u32 blocks = (count + 15) >> 4;
             u32 decoded = blocks << 4;
-            if (decoded < v->_74) {
+            if (decoded < (u32)v->_74) {
                 v->_64 = (u16)(decoded - count);
                 v->_74 -= decoded;
             } else {
@@ -146,7 +149,7 @@ static void downloadPcm(Voice* v, s16* dst, u32 count) {
             v->_74 = v->_114 - v->_68;
             v->_70 = v->_118 + v->_68 * (u32)sizeof(T);
         }
-        u32 n = v->_74 < count ? v->_74 : count;
+        u32 n = (u32)v->_74 < count ? (u32)v->_74 : count;
         const u8* src = aram(v->_70, n * (u32)sizeof(T));
         for (u32 i = 0; i < n; i++) {
             if (!src) {

@@ -134,8 +134,9 @@ struct Backend {
     // Bracket a display list call (CALL_DL at `addr`, `size` bytes at
     // `data`): the draws in between come from the list.  If Begin returns
     // true, the backend has already replayed the whole list: it is not
-    // parsed and End is not called.
-    virtual bool displayListBegin(u32 addr, const u8* data, u32 size) { return false; }
+    // parsed and End is not called.  The default answer is "not handled",
+    // so the base takes the arguments unnamed.
+    virtual bool displayListBegin(u32, const u8*, u32) { return false; }
     virtual void displayListEnd() {}
 };
 

@@ -16,7 +16,7 @@ void TouchInputHandler::updateActivePointers(
     uint32_t& touchButtons) {
 
     mBtnDpadLeft = mBtnDpadRight = mBtnDpadUp = mBtnDpadDown = false;
-    bool stickFound = false, starStickFound = false, cameraSwipeFound = false;
+    bool stickFound = false, starStickFound = false;
     bool downA = false, downB = false, downZ = false, downSpin = false, downPlus = false;
 
     float maxDistA = (bl.ar * 1.30f) * (bl.ar * 1.30f);
@@ -97,7 +97,6 @@ void TouchInputHandler::updateActivePointers(
                 mPointerActiveFrames = 120;
             }
         } else if (role == TouchRole::CAMERA_SWIPE) {
-            cameraSwipeFound = true;
             if (slot >= 0) {
                 float dx = px - mTouches[slot].lastX;
                 float dy = py - mTouches[slot].lastY;

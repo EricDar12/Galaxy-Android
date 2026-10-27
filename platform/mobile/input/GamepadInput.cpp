@@ -88,7 +88,7 @@ void GamepadInput::updateButtonMask() {
     mPhysicalButtons = mask;
 }
 
-bool GamepadInput::handleKey(int32_t keyCode, int32_t action, int32_t repeatCount, PortPadState& pad, int& spinFrames) {
+bool GamepadInput::handleKey(int32_t keyCode, int32_t action, int32_t /*repeatCount*/, PortPadState& pad, int& spinFrames) {
     if (keyCode == 24 /* AKEYCODE_VOLUME_UP */ || keyCode == 25 /* AKEYCODE_VOLUME_DOWN */ || keyCode == 164 /* AKEYCODE_VOLUME_MUTE */) {
         return false;
     }

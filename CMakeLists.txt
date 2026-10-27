@@ -36,8 +36,10 @@ list(APPEND SDK_SRCS ${DECOMP}/src/RVL_SDK/os/OSMutex.c ${DECOMP}/src/RVL_SDK/os
 # THP movie audio is plain C (the video decoder is replaced by platform/src/sdk/thp_video.cpp).
 list(APPEND SDK_SRCS ${DECOMP}/src/RVL_SDK/thp/THPAudio.c)
 
-set(DECOMP_INCLUDES
-  ${CMAKE_SOURCE_DIR}/platform/include
+# Third-party headers, included as SYSTEM by the owned targets so their own
+# diagnostics (the flat 4x4 indexing in TVec.hpp, nw4r's pointer casts) stay out of
+# the platform/ build log.
+set(DECOMP_SDK_INCLUDES
   ${DECOMP}/include
   ${DECOMP}/libs/JSystem/include
   ${DECOMP}/libs/RVL_SDK/include
@@ -45,12 +47,32 @@ set(DECOMP_INCLUDES
   ${DECOMP}/libs/RVLFaceLib/include
 )
 
+set(DECOMP_INCLUDES
+  ${CMAKE_SOURCE_DIR}/platform/include
+  ${DECOMP_SDK_INCLUDES}
+)
+
 option(TARGET_MOBILE "Build flat-screen Android mobile target without OpenXR" ON)
 
-set(PORT_DEFS TARGET_PC=1 NDEBUG=1 VERSION=0)
+# NDEBUG used to be forced on here, which compiled every assert() in the tree away
+# no matter what CMAKE_BUILD_TYPE said. The build type decides now: Release and
+# RelWithDebInfo still define it, Debug keeps the checks.
+set(PORT_DEFS TARGET_PC=1 VERSION=0)
 if(TARGET_MOBILE)
   list(APPEND PORT_DEFS TARGET_MOBILE=1)
 endif()
+
+# The version players see in the settings drawer is the version the APK is packaged
+# with, so it comes from the manifest instead of being written a second time - the
+# hand-written copy had drifted to v0.6.0 while the APK was on 0.0.4a.
+set(PORT_MANIFEST ${CMAKE_SOURCE_DIR}/platform/mobile/AndroidManifest.xml)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${PORT_MANIFEST})
+file(READ ${PORT_MANIFEST} PORT_MANIFEST_TEXT)
+string(REGEX MATCH "android:versionName=\"([^\"]*)\"" _ "${PORT_MANIFEST_TEXT}")
+if(NOT CMAKE_MATCH_1)
+  message(FATAL_ERROR "${PORT_MANIFEST} carries no android:versionName")
+endif()
+set(PORT_APP_VERSION "${CMAKE_MATCH_1}")
 
 # Paths in the binaries (__FILE__, debug info) relative to the repository
 # and the NDK, not the machine that built them.
@@ -59,8 +81,12 @@ if(ANDROID)
   add_compile_options(-ffile-prefix-map=${ANDROID_NDK}=ndk)
 endif()
 
+# Code generation and ABI flags, shared by the decompiled SDK and the port.
 set(PORT_COMMON_FLAGS
-  -O3
+  # -O3 unconditionally used to override whatever CMAKE_BUILD_TYPE asked for, so a
+  # Debug configure still got fully optimised, undebuggable code.  Release and
+  # RelWithDebInfo - the two the shipped APKs are built as - keep -O3 byte for byte.
+  $<$<NOT:$<CONFIG:Debug>>:-O3>
   -fno-math-errno
   -fno-trapping-math
   -fomit-frame-pointer
@@ -69,53 +95,26 @@ set(PORT_COMMON_FLAGS
   -fno-strict-aliasing
   -fwrapv
   -ffp-contract=on
-  -Wno-register
-  -Wno-multichar
-  -Wno-invalid-offsetof
-  -Wno-c++11-narrowing
-  -Wno-writable-strings
-  -Wno-null-conversion
-  -Wno-deprecated-declarations
-  -Wno-int-to-pointer-cast
-  -Wno-pointer-to-int-cast
-  -Wno-invalid-source-encoding
-  -Wno-unused-value
-  -Wno-return-type
-  -Wno-switch
-  -Wno-parentheses
-  -Wno-dangling-else
-  -Wno-tautological-compare
-  -Wno-tautological-undefined-compare
-  -Wno-undefined-bool-conversion
-  -Wno-constant-conversion
-  -Wno-shift-negative-value
-  -Wno-implicit-function-declaration
-  -Wno-int-conversion
-  -Wno-incompatible-pointer-types
-  -Wno-incompatible-function-pointer-types
-  -Wno-pointer-sign
-  -Wno-unknown-pragmas
-  -Wno-ignored-attributes
-  -Wno-microsoft-template
   -fms-extensions
-  -Wno-void-pointer-to-int-cast
-  -Wno-microsoft-cast
-  -Wno-microsoft-anon-tag
-  -Wno-microsoft-include
-  -Wno-language-extension-token
   $<$<C_COMPILER_ID:Clang>:-ferror-limit=0>
   $<$<CXX_COMPILER_ID:Clang>:-ferror-limit=0>
   $<$<C_COMPILER_ID:GNU>:-fmax-errors=0>
   $<$<CXX_COMPILER_ID:GNU>:-fmax-errors=0>
   -include ${CMAKE_SOURCE_DIR}/platform/include/port/compat.h
 )
+
+# The decompiled SDK keeps every suppression and the owned platform layer gets
+# -Wall -Wextra: both lists, and the reason for every entry in them, live in
+# cmake/PortDiagnostics.cmake next to each other.
+include(${CMAKE_SOURCE_DIR}/cmake/PortDiagnostics.cmake)
+
 set(PORT_CXX_FLAGS -fno-exceptions -fno-rtti)
 set(PORT_C_FLAGS)
 
 add_library(decomp OBJECT ${GAME_SRCS} ${JSYSTEM_SRCS} ${NW4R_SRCS} ${SDK_SRCS})
 target_include_directories(decomp PRIVATE ${DECOMP_INCLUDES})
 target_compile_definitions(decomp PRIVATE ${PORT_DEFS})
-target_compile_options(decomp PRIVATE ${PORT_COMMON_FLAGS} $<$<COMPILE_LANGUAGE:CXX>:${PORT_CXX_FLAGS}> $<$<COMPILE_LANGUAGE:C>:${PORT_C_FLAGS}>)
+target_compile_options(decomp PRIVATE ${PORT_COMMON_FLAGS} ${DECOMP_WARNING_SUPPRESSIONS} $<$<COMPILE_LANGUAGE:CXX>:${PORT_CXX_FLAGS}> $<$<COMPILE_LANGUAGE:C>:${PORT_C_FLAGS}>)
 
 
 # ---------------------------------------------------------------------------
@@ -128,12 +127,23 @@ file(GLOB_RECURSE PLATFORM_SRCS CONFIGURE_DEPENDS
   ${CMAKE_SOURCE_DIR}/platform/mobile/*.cpp)
 
 add_library(game SHARED $<TARGET_OBJECTS:decomp> ${PLATFORM_SRCS})
-target_include_directories(game PRIVATE ${DECOMP_INCLUDES} ${CMAKE_SOURCE_DIR}/platform ${CMAKE_SOURCE_DIR}/platform/src)
+# The decomp tree is included as SYSTEM here: its headers carry 32-bit GameCube
+# idioms (flat 4x4 indexing in TVec.hpp, nw4r casting nodes to u32) and those are
+# not the port's diagnostics to answer for.  platform/ itself is not SYSTEM, so
+# everything below still gets the re-enabled warnings.
+target_include_directories(game SYSTEM PRIVATE ${DECOMP_SDK_INCLUDES})
+target_include_directories(game PRIVATE ${CMAKE_SOURCE_DIR}/platform/include ${CMAKE_SOURCE_DIR}/platform ${CMAKE_SOURCE_DIR}/platform/src)
 target_compile_definitions(game PRIVATE ${PORT_DEFS} PORT_PLATFORM_CODE=1)
+# Only the owned layer prints the version, so this stays off the decomp command line
+# where a bump would rebuild all 1850 of its translation units.
+target_compile_definitions(game PRIVATE "PORT_APP_VERSION=\"${PORT_APP_VERSION}\"")
 if(TARGET_MOBILE)
   target_compile_definitions(game PRIVATE TARGET_MOBILE=1)
 endif()
-target_compile_options(game PRIVATE ${PORT_COMMON_FLAGS} $<$<COMPILE_LANGUAGE:CXX>:${PORT_CXX_FLAGS}> $<$<COMPILE_LANGUAGE:C>:${PORT_C_FLAGS}>)
+# Order matters: clang applies these left to right, so a -Wno-* that comes before
+# -Wall/-Wextra is switched straight back on by the group.  The named exclusions go
+# after the umbrella flags, and nothing the exclusions answer is re-enabled later.
+target_compile_options(game PRIVATE ${PORT_COMMON_FLAGS} ${OWNED_DIAGNOSTICS} ${OWNED_WARNING_SUPPRESSIONS} $<$<COMPILE_LANGUAGE:CXX>:${PORT_CXX_FLAGS}> $<$<COMPILE_LANGUAGE:C>:${PORT_C_FLAGS}>)
 target_link_options(game PRIVATE -Wl,--no-undefined)
 if(ANDROID)
   # -Bsymbolic: game code must bind to the port's operator new/delete, not the

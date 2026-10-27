@@ -20,7 +20,7 @@ static u32 usedTexUnits(const u32* bp) {
     return mask;
 }
 
-u32 Builder::screenTexGens(const Frame& f, const Item& it, u32 first, const ShaderUid& uid) {
+u32 Builder::screenTexGens(const Frame&, const Item&, u32, const ShaderUid&) {
     return 0;
 }
 

@@ -5,13 +5,13 @@ namespace mobile_ui {
 void SettingsMenuHandler::drawDrawerChrome(
     VertexBatcher& vb, float drawerX, float drawerW, float padX,
     float contentW, float contentTop, float contentBottom, float h,
-    float uiScale, float cogRot, Color themeColor, int activeBackend) {
+    float uiScale, float cogRot, Color /*themeColor*/, int /*activeBackend*/) {
 
     // Header bar & Cogwheel
     vb.drawRoundRect(drawerX - 60.0f, 0.0f, drawerX + drawerW, contentTop, 0.0f, rgba(0.08f, 0.07f, 0.16f, 0.95f));
     vb.drawCogwheel(drawerX + padX + 14.0f * uiScale, 28.0f * uiScale, 13.0f * uiScale, rgba(0.40f, 0.80f, 1.0f, 0.95f), cogRot);
     vb.drawText("SUPER MARIO GALAXY", drawerX + padX + 36.0f * uiScale, 26.0f * uiScale, 0.38f * uiScale, rgba(0.96f, 0.97f, 0.98f, 1.0f), 0);
-    vb.drawText("v0.6.0 • PURE VULKAN 1.0 • CO-OP", drawerX + padX + 36.0f * uiScale, 38.0f * uiScale, 0.22f * uiScale, rgba(0.35f, 0.75f, 1.0f, 0.85f), 0);
+    vb.drawText("v" PORT_APP_VERSION " • PURE VULKAN 1.0 • CO-OP", drawerX + padX + 36.0f * uiScale, 38.0f * uiScale, 0.22f * uiScale, rgba(0.35f, 0.75f, 1.0f, 0.85f), 0);
 
     // Active Backend tag pill (frosted glass outline)
     const char* backendTag = "VULKAN 1.0";

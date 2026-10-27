@@ -219,7 +219,6 @@ bool SettingsMenuHandler::handleTouch(const AInputEvent* event, int screenW, int
                         float boxW = 150.0f * uiScale;
                         float boxH = 30.0f * uiScale;
                         float rowDrawY = contentTop + curY - mDrawerScrollY;
-                        float boxX0 = drawerX + drawerW - padX - 10.0f * uiScale - boxW;
                         float boxY0 = rowDrawY + (rowH - boxH) * 0.5f;
 
                         mActiveDropdownAction = r.action;
