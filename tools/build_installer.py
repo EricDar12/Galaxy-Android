@@ -51,25 +51,36 @@ def verify_download(archive, expected_size, expected_sha256):
                            % (archive.name, digest.hexdigest(), expected_sha256))
 
 
-def extract_tools(archive, destination):
-    """Extract only regular platform-tools files, within the build directory."""
+def extract_zip(archive, destination, prefix=''):
+    """Extracts the regular files under `prefix` from a zip archive.
+
+    Member names are checked as they are resolved, not as they are spelled: an
+    archive downloaded from a package server can carry `../` or absolute paths,
+    which would write outside `destination`, and a symlink entry would let the
+    extracted tree point somewhere else entirely."""
     destination = Path(destination).resolve()
     with zipfile.ZipFile(archive) as source:
         for entry in source.infolist():
             name = entry.filename.replace('\\', '/')
-            if not name.startswith('platform-tools/') or entry.is_dir():
+            if not name.startswith(prefix) or entry.is_dir():
                 continue
             target = (destination / name).resolve()
             if destination not in target.parents:
-                raise ValueError('Unsafe platform-tools archive path: ' + name)
+                raise ValueError('Unsafe archive path: ' + name)
             if (entry.external_attr >> 16) & 0o170000 == 0o120000:
-                raise ValueError('Unexpected symlink in platform-tools archive: ' + name)
+                raise ValueError('Unexpected symlink in archive: ' + name)
             target.parent.mkdir(parents=True, exist_ok=True)
             with source.open(entry) as src, target.open('wb') as dst:
                 shutil.copyfileobj(src, dst)
             mode = (entry.external_attr >> 16) & 0o777
             if mode:
                 target.chmod(mode)
+    return destination
+
+
+def extract_tools(archive, destination):
+    """Extract only regular platform-tools files, within the build directory."""
+    destination = extract_zip(archive, destination, 'platform-tools/')
     adb = destination / 'platform-tools' / ('adb.exe' if sys.platform == 'win32' else 'adb')
     if not adb.is_file():
         raise ValueError('The downloaded platform-tools archive contains no adb executable.')

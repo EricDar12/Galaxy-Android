@@ -19,8 +19,13 @@ Checks
   5. the debuggable flag matches policy: `android:debuggable="true"` is allowed
      only for the sideload tester channel (GALAXY_ALLOW_DEBUGGABLE=1).
 
+Checks 3 and 4 are read out of the archive alone, so they also run on the desktop
+installer builders, which have no Android SDK; checks 2 and 5 need build-tools.
+
 Usage: python tools/verify_release_apk.py [apk ...]
        defaults to out-mobile/*.apk
+       --structure-only skips checks 2 and 5, which need the Android build-tools,
+       so a machine with no SDK can still refuse a foreign or damaged payload.
 Exit status: 0 publishable, 1 refused.
 """
 
@@ -94,6 +99,18 @@ def check_contents(archive):
     return problems
 
 
+def check_archive(apk):
+    """Everything the archive itself says, with no Android build-tools involved.
+
+    A truncated or foreign download fails here as a problem to report rather than
+    a traceback, so every caller refuses it the same way."""
+    try:
+        with zipfile.ZipFile(apk) as zf:
+            return check_entries(zf.namelist()) + check_contents(zf)
+    except (zipfile.BadZipFile, OSError) as error:
+        return [f"cannot be read as an APK archive: {error}"]
+
+
 def parse_debuggable(xmltree):
     """Reads android:debuggable out of `aapt2 dump xmltree` output.
 
@@ -115,10 +132,7 @@ def tester_debuggable_opt_in():
 
 
 def inspect(apk, channel="production", allow_debuggable=False):
-    problems = []
-    with zipfile.ZipFile(apk) as zf:
-        problems += check_entries(zf.namelist())
-        problems += check_contents(zf)
+    problems = check_archive(apk)
 
     signer = run([APKSIGNER, "verify", "--print-certs", apk])
     if signer.returncode != 0:
@@ -168,19 +182,22 @@ def parse_args(argv):
     parser.add_argument("--channel", choices=["production", "tester"],
                         default=os.environ.get("GALAXY_RELEASE_CHANNEL", "production").lower(),
                         help="Release channel: 'production' (default) or 'tester'")
+    parser.add_argument("--structure-only", action="store_true",
+                        help="Check only what the archive shows, without apksigner or aapt2")
     parser.add_argument("apks", nargs="*", help="APK file(s) to verify")
     return parser.parse_args(argv)
 
 
 def main(argv):
-    missing = [name for name, tool in (("apksigner", APKSIGNER), ("aapt2", AAPT2))
-               if not tool or not os.path.exists(tool)]
-    if missing:
-        print(f"[GATE] REFUSING TO RELEASE: {', '.join(missing)} not found in the Android "
-              f"build-tools (set ANDROID_HOME or ANDROID_SDK_ROOT)")
-        return 1
-
     args = parse_args(argv)
+    if not args.structure_only:
+        missing = [name for name, tool in (("apksigner", APKSIGNER), ("aapt2", AAPT2))
+                   if not tool or not os.path.exists(tool)]
+        if missing:
+            print(f"[GATE] REFUSING TO RELEASE: {', '.join(missing)} not found in the Android "
+                  f"build-tools (set ANDROID_HOME or ANDROID_SDK_ROOT)")
+            return 1
+
     channel = args.channel
     apks = args.apks or sorted(glob.glob(os.path.join(ROOT, "out-mobile", "*.apk")))
     if not apks:
@@ -191,14 +208,18 @@ def main(argv):
         return 1
 
     allow_debuggable = channel == "tester" and tester_debuggable_opt_in()
-
-    problems = inspect(apks[0], channel=channel, allow_debuggable=allow_debuggable)
+    mode = "structure" if args.structure_only else "full"
+    if args.structure_only:
+        problems = check_archive(apks[0])
+    else:
+        problems = inspect(apks[0], channel=channel, allow_debuggable=allow_debuggable)
     if problems:
-        print(f"[GATE] REFUSING TO RELEASE {apks[0]} [channel: {channel}]:")
+        print(f"[GATE] REFUSING TO RELEASE {apks[0]} [channel: {channel}, {mode} checks]:")
         for problem in problems:
             print(f"  - {problem}")
         return 1
-    print(f"[GATE] {apks[0]} is publishable on channel '{channel}' ({os.path.getsize(apks[0])} bytes)")
+    print(f"[GATE] {apks[0]} is publishable on channel '{channel}' "
+          f"({os.path.getsize(apks[0])} bytes, {mode} checks)")
     return 0
 
 

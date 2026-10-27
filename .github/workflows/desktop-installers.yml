@@ -83,6 +83,17 @@ jobs:
           tag = urllib.parse.quote(os.environ['RELEASE_TAG'], safe='')
           url = 'https://github.com/%s/releases/download/%s/GalaxyQuest.apk' % (os.environ['RELEASE_REPO'], tag)
           urllib.request.urlretrieve(url, target)
+      # This file is copied into the installer that lands on players' desktops, so
+      # it is inspected before packaging: the download step only proves the asset
+      # exists, not that it is our arm64 payload.  These runners have no Android
+      # SDK, so the pinned-signer check stays in release.yml and this leg runs the
+      # checks that the archive can answer on its own.
+      - name: Verify the released APK before packaging it
+        shell: python
+        run: |
+          import subprocess, sys
+          subprocess.run([sys.executable, 'tools/verify_release_apk.py', '--structure-only',
+                          'out/GalaxyQuest.apk'], check=True)
       - name: Build and smoke test packaged installer
         shell: python
         run: |

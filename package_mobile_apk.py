@@ -19,6 +19,49 @@ INSTALLER_DIR = os.path.join(ROOT, "installer-mobile")
 MANIFEST_TESTER = os.path.join(ROOT, "platform", "mobile", "AndroidManifest.xml")
 MANIFEST_PRODUCTION = os.path.join(ROOT, "platform", "mobile", "AndroidManifest.production.xml")
 
+# An APK without the engine libraries is a shell that crashes on launch, and
+# without libinstaller.so it cannot extract a disc.  The release gate checks the
+# published artifact, but the packager used to warn and carry on, so a half-built
+# build-mobile tree produced a signable, shippable, empty game.
+REQUIRED_LIBS = ["libgame.so", "libmain.so", "libreserve.so"]
+INSTALLER_LIB = "libinstaller.so"
+
+
+def find_installer_library(build_dir=None):
+    """The built libinstaller.so, or None when it was never compiled.
+
+    The standalone installer build puts it under build-installer instead of next
+    to the engine, so both trees are searched."""
+    build_dir = build_dir or BUILD_MOBILE
+    for candidate in (os.path.join(build_dir, INSTALLER_LIB),
+                      os.path.join(ROOT, "build-installer", "lib", "arm64-v8a", INSTALLER_LIB),
+                      os.path.join(ROOT, "build-installer", "native", INSTALLER_LIB)):
+        if os.path.exists(candidate):
+            return candidate
+    return None
+
+
+def require_built_libraries(build_dir=None):
+    build_dir = build_dir or BUILD_MOBILE
+    missing = [lib for lib in REQUIRED_LIBS if not os.path.isfile(os.path.join(build_dir, lib))]
+    if missing:
+        raise SystemExit(
+            "REFUSING TO PACKAGE: %s not found in %s - build the engine first "
+            "(ninja -C build-mobile game)" % (", ".join(missing), build_dir))
+    if find_installer_library(build_dir) is None:
+        raise SystemExit(
+            "REFUSING TO PACKAGE: %s is not built - the release gate requires it "
+            "(python installer-mobile/build.py)" % INSTALLER_LIB)
+
+
+def install_native_library(src, dst):
+    """Put one built library into the APK, stripped when the NDK tool is present."""
+    if STRIP and os.path.exists(STRIP):
+        run([STRIP, "--strip-unneeded", "-o", dst, src])
+    else:
+        shutil.copyfile(src, dst)
+
+
 def safe_cmd_str(cmd):
     masked = []
     skip = False
@@ -110,6 +153,7 @@ def main():
     print(f"  NDK: {NDK_DIR}")
     print(f"  Strip: {STRIP}")
     require_deliberate_debuggable(channel, manifest)
+    require_built_libraries()
     keystore = prepare_signing_key(channel=channel)
     key_alias = signing_alias(channel)
 
@@ -166,35 +210,17 @@ def main():
     with open(wrap_src, "rb") as f_in, open(os.path.join(arm64_dir, "wrap.sh"), "wb") as f_out:
         f_out.write(f_in.read().replace(b"\r\n", b"\n"))
 
-    game_libs = ["libgame.so", "libmain.so", "libreserve.so"]
-    for lib in game_libs:
-        src_lib = os.path.join(BUILD_MOBILE, lib)
-        dst_lib = os.path.join(arm64_dir, lib)
-        if os.path.exists(src_lib):
-            if STRIP and os.path.exists(STRIP):
-                run([STRIP, "--strip-unneeded", "-o", dst_lib, src_lib])
-            else:
-                shutil.copyfile(src_lib, dst_lib)
-        else:
-            print(f"[WARN] Native library {src_lib} not found in build directory.")
+    for lib in REQUIRED_LIBS:
+        install_native_library(os.path.join(BUILD_MOBILE, lib),
+                               os.path.join(arm64_dir, lib))
 
     nodtool_src = os.path.join(INSTALLER_DIR, "vendor", "nodtool", "libnodtool.so")
     if os.path.exists(nodtool_src):
         shutil.copyfile(nodtool_src, os.path.join(arm64_dir, "libnodtool.so"))
 
-    installer_candidates = [
-        os.path.join(BUILD_MOBILE, "libinstaller.so"),
-        os.path.join(ROOT, "build-installer", "lib", "arm64-v8a", "libinstaller.so"),
-        os.path.join(ROOT, "build-installer", "native", "libinstaller.so"),
-    ]
-    for cand in installer_candidates:
-        if os.path.exists(cand):
-            dst = os.path.join(arm64_dir, "libinstaller.so")
-            if STRIP and os.path.exists(STRIP):
-                run([STRIP, "--strip-unneeded", "-o", dst, cand])
-            else:
-                shutil.copyfile(cand, dst)
-            break
+    # libinstaller.so carries the in-app disc extractor; the pre-flight refused a
+    # build without it, so a missing source here would be a broken tree.
+    install_native_library(find_installer_library(), os.path.join(arm64_dir, INSTALLER_LIB))
 
     py_lib_dir = os.path.join(INSTALLER_DIR, "vendor", "python", "lib", "arm64-v8a")
     if os.path.isdir(py_lib_dir):
