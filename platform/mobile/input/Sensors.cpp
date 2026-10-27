@@ -86,6 +86,21 @@ void Sensors::poll(PortPadState& pad, bool isStickActive) {
                 mobile_ui::UIOverlay::get().setPointerPos(pad.pointerX, pad.pointerY);
                 port_input_set(0, &pad);
             }
+            if (port_input_is_tilt_active() && !isStickActive) {
+                // Steer ray/ball using gyro roll rate when stick is not actively deflected
+                float rollRate = (mobile_ui::UIOverlay::get().settings().screenOrientationChoice == 2)
+                                     ? -event.vector.y : event.vector.y;
+                static float sGyroTiltRoll = 0.0f;
+                sGyroTiltRoll = std::max(-1.0f, std::min(1.0f, sGyroTiltRoll + rollRate * 0.045f));
+                if (fabsf(rollRate) < 0.02f) sGyroTiltRoll *= 0.96f; // Smooth spring-back to neutral
+                if (fabsf(sGyroTiltRoll) > 0.03f) {
+                    pad.tilted = 1;
+                    pad.downX = sGyroTiltRoll;
+                    float rem = 1.0f - pad.downX * pad.downX;
+                    pad.downY = -(rem > 0.0f ? sqrtf(rem) : 0.0f);
+                    port_input_set(0, &pad);
+                }
+            }
         } else if (event.type == ASENSOR_TYPE_ACCELEROMETER) {
             float rawRoll, rawPitch;
             if (mobile_ui::UIOverlay::get().settings().screenOrientationChoice == 2) {
@@ -105,7 +120,7 @@ void Sensors::poll(PortPadState& pad, bool isStickActive) {
                     pad.downZ = rawPitch;
                     float rem = 1.0f - (pad.downX * pad.downX + pad.downZ * pad.downZ);
                     pad.downY = -(rem > 0.0f ? sqrtf(rem) : 0.0f);
-                } else {
+                } else if (!mGyroSensor) {
                     pad.tilted = 0;
                 }
             } else {

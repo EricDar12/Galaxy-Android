@@ -169,25 +169,33 @@ void VkRenderer::executeCopyItem(VkCommandBuffer cmd, const Item& it, const Prep
             vkCmdBindIndexBuffer(cmd, fr.ibo, 0, VK_INDEX_TYPE_UINT32);
             inRenderPass = true;
         }
+        uint32_t clearAttCount = 0;
         VkClearAttachment clearAtts[2]{};
-        clearAtts[0].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        clearAtts[0].colorAttachment = 0;
-        u32 ar = cp[6], gb = cp[7];
-        clearAtts[0].clearValue.color = {{
-            (ar & 0xFF) / 255.0f,
-            ((gb >> 8) & 0xFF) / 255.0f,
-            (gb & 0xFF) / 255.0f,
-            ((ar >> 8) & 0xFF) / 255.0f
-        }};
-        clearAtts[1].aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-        clearAtts[1].clearValue.depthStencil = {(cp[8] & 0xFFFFFF) / 16777215.0f, 0};
-        if (clearWidth > 0 && clearHeight > 0) {
+        bool isDepthCopy = !toXfb && (((ctrl >> 4) & 7) == 3 || ((ctrl >> 4) & 7) == 11);
+        if (toXfb || !isDepthCopy) {
+            clearAtts[clearAttCount].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            clearAtts[clearAttCount].colorAttachment = 0;
+            u32 ar = cp[6], gb = cp[7];
+            clearAtts[clearAttCount].clearValue.color = {{
+                (ar & 0xFF) / 255.0f,
+                ((gb >> 8) & 0xFF) / 255.0f,
+                (gb & 0xFF) / 255.0f,
+                ((ar >> 8) & 0xFF) / 255.0f
+            }};
+            clearAttCount++;
+        }
+        if (toXfb || isDepthCopy) {
+            clearAtts[clearAttCount].aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+            clearAtts[clearAttCount].clearValue.depthStencil = {(cp[8] & 0xFFFFFF) / 16777215.0f, 0};
+            clearAttCount++;
+        }
+        if (clearWidth > 0 && clearHeight > 0 && clearAttCount > 0) {
             VkClearRect clearRect{};
             clearRect.rect.offset = {sx0, sy0};
             clearRect.rect.extent = {(uint32_t)clearWidth, (uint32_t)clearHeight};
             clearRect.baseArrayLayer = 0;
             clearRect.layerCount = 1;
-            vkCmdClearAttachments(cmd, 2, clearAtts, 1, &clearRect);
+            vkCmdClearAttachments(cmd, clearAttCount, clearAtts, 1, &clearRect);
         }
     }
 }

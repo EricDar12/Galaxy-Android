@@ -70,6 +70,8 @@ void port_gx_camera(const float* camera);  // PORT_GX_CAMERA_WORDS words
 // pitch (0 = level, 90 = pointing up) that a level-held controller stands
 // for (platform/src/input/wpad.cpp).
 void port_input_use_tilt(float neutralPitchDeg);
+int port_input_is_tilt_active(void);
+float port_input_get_tilt_neutral_pitch(void);
 #define PORT_GX_MARK_HUD_BEGIN 1
 #define PORT_GX_MARK_HUD_END 2
 #define PORT_GX_MARK_SKY_BEGIN 3  // skies drawn around the game camera

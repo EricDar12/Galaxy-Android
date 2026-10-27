@@ -7,6 +7,7 @@
 #include "../system/StorageManager.h"
 #include "../system/SystemManager.h"
 #include "../ui/UIOverlay.h"
+#include "gx/vk_renderer.h"
 #include "port/port.h"
 
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, "GalaxyBoot", __VA_ARGS__)
@@ -35,7 +36,13 @@ void GameBooter::pollAndBoot(bool& gameBooted, std::string& dataRoot, const std:
             }
         }
 
-        LOGI("Booting game from: %s", dataRoot.c_str());
+        char boardProp[PROP_VALUE_MAX] = {0};
+        char modelProp[PROP_VALUE_MAX] = {0};
+        __system_property_get("ro.product.board", boardProp);
+        __system_property_get("ro.product.model", modelProp);
+        LOGI("[STARTUP_DIAG] Device: %s (Board: %s)", modelProp[0] ? modelProp : "Unknown", boardProp[0] ? boardProp : "Unknown");
+        LOGI("[STARTUP_DIAG] Active GPU: %s (Backend: Vulkan 1.0)", gpu::VkRenderer::get().deviceName());
+        LOGI("[STARTUP_DIAG] Booting game from: %s (Save: %s)", dataRoot.c_str(), saveRoot.c_str());
         gameBooted = true;
         port_boot(dataRoot.c_str(), saveRoot.c_str());
     } else {

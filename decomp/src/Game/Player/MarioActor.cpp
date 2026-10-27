@@ -1065,16 +1065,16 @@ void MarioActor::control() {
     static TVec3f sSaveFront(0.0f, 0.0f, 1.0f);
     static s32 sSaveHealth = 3;
     static bool sHasSavestate = false;
-    static bool sAttemptedDiskRestore = false;
+    static const char* sLastRestoredStage = nullptr;
 
-    if (!sAttemptedDiskRestore) {
-        sAttemptedDiskRestore = true;
+    const char* curStage = MR::getCurrentStageName();
+    if (curStage != nullptr && curStage != sLastRestoredStage) {
+        sLastRestoredStage = curStage;
         char diskStage[48]{};
         float diskPos[3]{}, diskVel[3]{}, diskFront[3]{};
         int diskHealth = 3;
         if (port_load_mario_state(diskStage, sizeof(diskStage), diskPos, diskVel, diskFront, &diskHealth)) {
-            const char* curStage = MR::getCurrentStageName();
-            if (curStage && strcmp(diskStage, curStage) == 0) {
+            if (strcmp(diskStage, curStage) == 0) {
                 sSavePos.set(diskPos[0], diskPos[1], diskPos[2]);
                 sSaveVel.set(diskVel[0], diskVel[1], diskVel[2]);
                 sSaveFront.set(diskFront[0], diskFront[1], diskFront[2]);
@@ -1101,7 +1101,6 @@ void MarioActor::control() {
         sSaveFront = mMario ? mMario->mFrontVec : TVec3f(0.0f, 0.0f, 1.0f);
         sSaveHealth = mHealth;
         sHasSavestate = true;
-        const char* curStage = MR::getCurrentStageName();
         if (curStage) {
             float p[3] = {mPosition.x, mPosition.y, mPosition.z};
             float v[3] = {mVelocity.x, mVelocity.y, mVelocity.z};
@@ -1110,11 +1109,11 @@ void MarioActor::control() {
         }
         MR::startSystemSE("SE_SY_STAR_RESULT_COIN");
     } else if (port_check_savestate_load()) {
-        if (!sHasSavestate) {
-            char diskStage[48]{};
-            float diskPos[3]{}, diskVel[3]{}, diskFront[3]{};
-            int diskHealth = 3;
-            if (port_load_mario_state(diskStage, sizeof(diskStage), diskPos, diskVel, diskFront, &diskHealth)) {
+        char diskStage[48]{};
+        float diskPos[3]{}, diskVel[3]{}, diskFront[3]{};
+        int diskHealth = 3;
+        if (port_load_mario_state(diskStage, sizeof(diskStage), diskPos, diskVel, diskFront, &diskHealth)) {
+            if (!curStage || strcmp(diskStage, curStage) == 0) {
                 sSavePos.set(diskPos[0], diskPos[1], diskPos[2]);
                 sSaveVel.set(diskVel[0], diskVel[1], diskVel[2]);
                 sSaveFront.set(diskFront[0], diskFront[1], diskFront[2]);
