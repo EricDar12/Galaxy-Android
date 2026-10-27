@@ -21,34 +21,29 @@ VkSampler VkRenderer::getSampler(uint32_t mode0, uint32_t mode1, uint32_t levels
     sci.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     sci.magFilter = ((mode0 >> 4) & 1) ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
 
+    // MODE0 bits 5-7 carry the hardware TX_MIN_* code written by the SDK
+    // (private/tx_reg.h via GX2HWFiltConv), not the GXTexFilter enum order.
     uint32_t minf = (mode0 >> 5) & 7;
     bool mips = levels > 1;
     switch (minf) {
-    case 0: // GX_NEAR
+    case 0: // TX_MIN_NEAREST
+    case 1: // TX_MIN_NEAREST_MIPMAP_NEAREST
         sci.minFilter = VK_FILTER_NEAREST;
         sci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
         break;
-    case 1: // GX_LINEAR
-        sci.minFilter = VK_FILTER_LINEAR;
-        sci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-        break;
-    case 2: // GX_NEAR_MIP_NEAR
+    case 2: // TX_MIN_NEAREST_MIPMAP_LINEAR
         sci.minFilter = VK_FILTER_NEAREST;
-        sci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        sci.mipmapMode = mips ? VK_SAMPLER_MIPMAP_MODE_LINEAR : VK_SAMPLER_MIPMAP_MODE_NEAREST;
         break;
-    case 3: // GX_LIN_MIP_NEAR
+    case 4: // TX_MIN_LINEAR
         sci.minFilter = VK_FILTER_LINEAR;
         sci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
         break;
-    case 4: // GX_NEAR_MIP_LIN
-        sci.minFilter = VK_FILTER_NEAREST;
-        sci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-        break;
-    case 5: // GX_LIN_MIP_LIN
+    case 5: // TX_MIN_LINEAR_MIPMAP_NEAREST
         sci.minFilter = VK_FILTER_LINEAR;
-        sci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        sci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
         break;
-    default:
+    default: // TX_MIN_LINEAR_MIPMAP_LINEAR, plus the two unused codes
         sci.minFilter = VK_FILTER_LINEAR;
         sci.mipmapMode = mips ? VK_SAMPLER_MIPMAP_MODE_LINEAR : VK_SAMPLER_MIPMAP_MODE_NEAREST;
         break;

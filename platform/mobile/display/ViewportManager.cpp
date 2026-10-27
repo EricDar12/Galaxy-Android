@@ -61,7 +61,12 @@ void ViewportManager::computeTargetSize(int screenW, int screenH, int scaleChoic
     }
 
     int targetW;
-    if (fullscreen) {
+    // A window that is still being created or resized reports 0 (or a negative
+    // error), and dividing by it turns the extent into NaN or an overflowing
+    // integer that vkCreateImage receives as garbage. Without a measured aspect
+    // there is nothing to match, so use the fixed 16:9 target; the next sized
+    // frame recreates the target through the normal resize path.
+    if (fullscreen && dispH > 0 && dispW > 0) {
         float nativeAspect = (float)dispW / (float)dispH;
         targetW = (int)lroundf(targetH * nativeAspect);
     } else {
@@ -74,7 +79,12 @@ void ViewportManager::computeTargetSize(int screenW, int screenH, int scaleChoic
 
 void ViewportManager::computePointerBounds(int screenW, int screenH, bool fullscreen,
                                           const Rect& vp, Rect& outBounds) {
-    if (fullscreen) {
+    // Same contract as update(): an unmeasured window has no bounds to map a
+    // touch into, and the callers already treat a non-positive extent as
+    // "not measured".
+    if (screenW <= 0 || screenH <= 0) {
+        outBounds = {0, 0, 0, 0};
+    } else if (fullscreen) {
         outBounds = {0, 0, screenW, screenH};
     } else {
         outBounds = vp;
