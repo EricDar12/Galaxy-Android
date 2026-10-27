@@ -1,5 +1,7 @@
 #include "SaveStorage.h"
 
+#include "DolphinSaveConverter.h"
+
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -7,6 +9,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <vector>
 
 #ifndef O_CLOEXEC
 #define O_CLOEXEC 0
@@ -22,6 +25,7 @@
 // Host-test portability; Android uses the POSIX calls directly.
 #include <direct.h>
 #include <io.h>
+#include <windows.h>
 #define fsync _commit
 #define lstat stat
 #define mkdir(path, mode) _mkdir(path)
@@ -31,6 +35,9 @@ namespace mobile_ui {
 namespace savefs {
 
 namespace {
+
+constexpr size_t kMinSaveSize = 0x140;
+constexpr size_t kMaxSaveSize = 0x10000;
 
 bool sameContents(const std::string& a, const std::string& b) {
     FILE* fa = fopen(a.c_str(), "rb");
@@ -46,6 +53,39 @@ bool sameContents(const std::string& a, const std::string& b) {
     if (fa) fclose(fa);
     if (fb) fclose(fb);
     return equal;
+}
+
+// POSIX rename() replaces an existing target while the C runtime rename() on
+// Windows fails, and overwriting the previous copy is the normal case here.
+// Without this the host tests would not be describing device behaviour.
+bool renameReplace(const std::string& from, const std::string& to) {
+#ifdef _WIN32
+    return MoveFileExA(from.c_str(), to.c_str(),
+                       MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
+#else
+    return rename(from.c_str(), to.c_str()) == 0;
+#endif
+}
+
+// The game accepts only its own little-endian save layout, and only when the
+// stored checksum covers the data length the header declares. Anything else --
+// a torn write, a Dolphin byte-order save, a padded or renamed blob -- must
+// never be promoted over live NAND data as though it were a valid slot.
+bool isNativeSaveFile(const std::string& path) {
+    struct stat st;
+    if (lstat(path.c_str(), &st) != 0 || !S_ISREG(st.st_mode)) return false;
+    if (st.st_size < static_cast<off_t>(kMinSaveSize) ||
+        st.st_size > static_cast<off_t>(kMaxSaveSize)) {
+        return false;
+    }
+    FILE* in = fopen(path.c_str(), "rb");
+    if (!in) return false;
+    std::vector<uint8_t> data(static_cast<size_t>(st.st_size));
+    bool read = fread(data.data(), 1, data.size(), in) == data.size();
+    fclose(in);
+    if (!read) return false;
+    return DolphinSaveConverter::isNativeSave(data.data(), data.size()) &&
+           DolphinSaveConverter::hasValidChecksum(data.data(), data.size(), false);
 }
 
 }  // namespace
@@ -105,7 +145,7 @@ bool copyFileVerified(const std::string& src, const std::string& dst) {
         return false;
     }
 
-    if (rename(tmpDst.c_str(), dst.c_str()) != 0) {
+    if (!renameReplace(tmpDst, dst)) {
         unlink(tmpDst.c_str());
         return false;
     }
@@ -177,7 +217,7 @@ bool writeFileAtomic(const std::string& path, const void* data, size_t size) {
     if (fsync(fd) != 0) ok = false;
     if (close(fd) != 0) ok = false;
 
-    if (!ok || rename(tmpDst.c_str(), path.c_str()) != 0) {
+    if (!ok || !renameReplace(tmpDst, path)) {
         unlink(tmpDst.c_str());
         return false;
     }
@@ -205,8 +245,7 @@ bool validateSaveDir(const std::string& dir) {
     struct stat st;
     if (lstat(dir.c_str(), &st) != 0 || !S_ISDIR(st.st_mode)) return false;
 
-    std::string directGameData = dir + "/GameData.bin";
-    if (lstat(directGameData.c_str(), &st) == 0 && S_ISREG(st.st_mode) && st.st_size >= 512) return true;
+    if (isNativeSaveFile(dir + "/GameData.bin")) return true;
 
     DIR* d = opendir(dir.c_str());
     if (!d) return false;
@@ -215,16 +254,12 @@ bool validateSaveDir(const std::string& dir) {
     while ((entry = readdir(d)) != nullptr) {
         if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, "..")) continue;
         std::string sub = dir + "/" + entry->d_name;
-        if (lstat(sub.c_str(), &st) == 0) {
-            if (S_ISDIR(st.st_mode)) {
-                if (validateSaveDir(sub)) {
-                    found = true;
-                    break;
-                }
-            } else if (S_ISREG(st.st_mode) && strstr(entry->d_name, "GameData.bin") && st.st_size >= 512) {
-                found = true;
-                break;
-            }
+        // Only directories can still hold the save; a regular child named
+        // "<something>GameData.bin<something>" is a leftover backup or a temp
+        // file, and validating it would bless a tree the game cannot load.
+        if (lstat(sub.c_str(), &st) == 0 && S_ISDIR(st.st_mode) && validateSaveDir(sub)) {
+            found = true;
+            break;
         }
     }
     closedir(d);

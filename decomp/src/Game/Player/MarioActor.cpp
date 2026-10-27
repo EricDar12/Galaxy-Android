@@ -45,6 +45,7 @@
 #include "Game/Util/PlayerUtil.hpp"
 #include "Game/Util/GamePadUtil.hpp"
 #include "Game/Util/SceneUtil.hpp"
+#include "Game/Util/StringUtil.hpp"
 #include "Game/Util/ScreenUtil.hpp"
 #include "Game/Util/SoundUtil.hpp"
 #include "Game/Util/StarPointerUtil.hpp"
@@ -1065,16 +1066,20 @@ void MarioActor::control() {
     static TVec3f sSaveFront(0.0f, 0.0f, 1.0f);
     static s32 sSaveHealth = 3;
     static bool sHasSavestate = false;
-    static const char* sLastRestoredStage = nullptr;
+    // SceneControlInfo rewrites mStage in place, so the pointer the stage name
+    // arrives through never changes; only its contents do.
+    static char sLastRestoredStage[48] = {0};
 
     const char* curStage = MR::getCurrentStageName();
-    if (curStage != nullptr && curStage != sLastRestoredStage) {
-        sLastRestoredStage = curStage;
+    if (curStage != nullptr && curStage[0] != '\0' &&
+        !MR::isEqualStringCase(sLastRestoredStage, curStage)) {
+        strncpy(sLastRestoredStage, curStage, sizeof(sLastRestoredStage) - 1);
+        sLastRestoredStage[sizeof(sLastRestoredStage) - 1] = '\0';
         char diskStage[48]{};
         float diskPos[3]{}, diskVel[3]{}, diskFront[3]{};
         int diskHealth = 3;
         if (port_load_mario_state(diskStage, sizeof(diskStage), diskPos, diskVel, diskFront, &diskHealth)) {
-            if (strcmp(diskStage, curStage) == 0) {
+            if (diskStage[0] != '\0' && MR::isEqualStageName(diskStage)) {
                 sSavePos.set(diskPos[0], diskPos[1], diskPos[2]);
                 sSaveVel.set(diskVel[0], diskVel[1], diskVel[2]);
                 sSaveFront.set(diskFront[0], diskFront[1], diskFront[2]);
@@ -1113,7 +1118,7 @@ void MarioActor::control() {
         float diskPos[3]{}, diskVel[3]{}, diskFront[3]{};
         int diskHealth = 3;
         if (port_load_mario_state(diskStage, sizeof(diskStage), diskPos, diskVel, diskFront, &diskHealth)) {
-            if (!curStage || strcmp(diskStage, curStage) == 0) {
+            if (!curStage || (diskStage[0] != '\0' && MR::isEqualStageName(diskStage))) {
                 sSavePos.set(diskPos[0], diskPos[1], diskPos[2]);
                 sSaveVel.set(diskVel[0], diskVel[1], diskVel[2]);
                 sSaveFront.set(diskFront[0], diskFront[1], diskFront[2]);

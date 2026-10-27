@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include "mobile/ui/SaveStorage.h"
 #include "port/heap_routing.h"
 #include "port/port.h"
 
@@ -70,10 +71,6 @@ void port_save_mario_state(const char* stage, const float pos[3], const float ve
     }
     if (health < 0 || health > 8) return;
 
-    std::string path = getMarioStatePath();
-    if (path.empty()) return;
-    std::string tmpPath = path + ".tmp";
-
     PortMarioStateHeader hdr{};
     hdr.magic = kMarioStateMagic;
     hdr.version = 2;
@@ -89,18 +86,12 @@ void port_save_mario_state(const char* stage, const float pos[3], const float ve
     size_t payloadLen = offsetof(PortMarioStateHeader, checksum);
     hdr.checksum = calcCrc32(reinterpret_cast<const uint8_t*>(&hdr), payloadLen);
 
-    FILE* f = fopen(tmpPath.c_str(), "wb");
-    if (!f) return;
-    size_t written = fwrite(&hdr, 1, sizeof(hdr), f);
-    fflush(f);
-    fclose(f);
-
-    if (written == sizeof(hdr)) {
-        remove(path.c_str());
-        rename(tmpPath.c_str(), path.c_str());
-    } else {
-        remove(tmpPath.c_str());
-    }
+    // Runs on a game thread, so the helper's temporary strings must not land in
+    // the JKR heap that is torn down with the scene.
+    PortHostAllocScope scope;
+    std::string path = getMarioStatePath();
+    if (path.empty()) return;
+    mobile_ui::savefs::writeFileAtomic(path, &hdr, sizeof(hdr));
 }
 
 int port_load_mario_state(char* stageOut, size_t maxLen, float posOut[3], float velOut[3],
