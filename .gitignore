@@ -73,3 +73,6 @@ platform/mobile/libs/
 .DS_Store
 Thumbs.db
 artifacts/
+
+# Local notes (not tracked)
+/bible.md
