@@ -1,5 +1,8 @@
 # Galaxy Android
 
+> [!WARNING]
+> **Experimental fork for the AYN Thor.** This is an unofficial, work-in-progress fork of [OpenPort-Labs/Galaxy-Android](https://github.com/OpenPort-Labs/Galaxy-Android). It aims to make the game fully playable with a controller, with no motion controls required, optimized for the AYN Thor. Expect things to be broken or incomplete. For the stable release, use the [upstream project](https://github.com/OpenPort-Labs/Galaxy-Android/releases).
+
 <p align="center">
   <img src="docs/images/logo.png" width="140" alt="Galaxy Android Logo" />
 </p>
