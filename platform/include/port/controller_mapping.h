@@ -10,7 +10,7 @@ extern "C" {
 typedef enum ControllerAction {
     ACTION_NONE = 0,
     ACTION_JUMP = 1,              // WPAD_BUTTON_A (0x0800)
-    ACTION_SPIN = 2,              // Spin attack / shake
+    ACTION_SPIN = 2,              // Spin attack (PORT_BUTTON_SPIN, read as a shake)
     ACTION_SHOOT_CANCEL = 3,       // WPAD_BUTTON_B (0x0400)
     ACTION_CROUCH_GROUNDPOUND = 4,// WPAD_BUTTON_Z (0x2000)
     ACTION_CAMERA_SNAP = 5,       // WPAD_BUTTON_C (0x1000)

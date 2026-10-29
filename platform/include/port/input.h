@@ -9,7 +9,7 @@ extern "C" {
 
 typedef struct PortPadState {
     int connected;         // a Wii remote + Nunchuk is present
-    uint32_t buttons;      // WPAD_BUTTON_* bits (remote and Nunchuk C/Z)
+    uint32_t buttons;      // WPAD_BUTTON_* bits (remote and Nunchuk C/Z), PORT_BUTTON_SPIN
     float stickX, stickY;  // Nunchuk stick, -1..1 (right / up positive)
     float rightStickX, rightStickY; // Right analog stick (camera orbit / look), -1..1 (right / up positive)
     // Motion of the remote and the Nunchuk in g (shakes), 0 when held still.

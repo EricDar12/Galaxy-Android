@@ -5,6 +5,7 @@
 #include <mutex>
 
 #include "port/input.h"
+#include "port/spin_button.h"
 #include "port/port.h"
 #include "revolution/kpad.h"
 #include "revolution/wpad.h"
@@ -250,7 +251,7 @@ s32 KPADRead(s32 chan, KPADStatus samples[], u32 length) {
         sPrevHold[chan] = 0;
         return 0;
     }
-    u32 hold = s.buttons & 0xFFFF;
+    u32 hold = s.buttons & (0xFFFFu | PORT_BUTTON_SPIN);  // the spin bit: see WPadHVSwing
     if (chan == 0) {
         // While a cutscene is skipped the port presses A for the game, and
         // after a skip A reads as released until the player lets go

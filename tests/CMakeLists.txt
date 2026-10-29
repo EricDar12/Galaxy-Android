@@ -178,6 +178,13 @@ target_include_directories(controller_mapping_test PRIVATE
 )
 add_test(NAME controller_mapping COMMAND controller_mapping_test)
 
+add_executable(spin_button_test
+  test_spin_button.cpp
+  ${CMAKE_SOURCE_DIR}/platform/src/port/controller_mapping.cpp
+)
+target_include_directories(spin_button_test PRIVATE ${CMAKE_SOURCE_DIR}/platform/include)
+add_test(NAME spin_button COMMAND spin_button_test)
+
 add_executable(viewport_bounds_test
   test_viewport_bounds.cpp
   ${CMAKE_SOURCE_DIR}/platform/mobile/display/ViewportManager.cpp

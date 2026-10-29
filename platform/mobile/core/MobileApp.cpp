@@ -19,6 +19,7 @@
 #include "../ui/UIOverlay.h"
 #include "gx/vk_shader_inventory.h"
 #include "port/port.h"
+#include "port/spin_button.h"
 
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, "GalaxyCore", __VA_ARGS__)
 #ifndef LOGW
@@ -91,6 +92,7 @@ void MobileApp::handleAppCmd(int32_t cmd) {
         mobile_ui::UIOverlay::get().resetInput();
         mGamepad.reset();
         mSpinFrames = 0;
+        mSpinPulse = false;
         mTouchscreenDown = false;
         mPad.buttons = mobile_ui::UIOverlay::get().getTouchButtons();
         port_input_set(0, &mPad);
@@ -153,7 +155,7 @@ void MobileApp::updateInputState() {
         mPad.stickX = 0.0f;
         mPad.stickY = 0.0f;
     }
-    mPad.buttons = mGamepad.buttons() | mobile_ui::UIOverlay::get().getTouchButtons();
+    mPad.buttons = mGamepad.buttons() | mobile_ui::UIOverlay::get().getTouchButtons() | (mSpinPulse ? PORT_BUTTON_SPIN : 0u);
     port_input_set(0, &mPad);
 }
 
@@ -248,15 +250,10 @@ void MobileApp::run(android_app* app, uintptr_t windowBase, size_t windowSize) {
         mobile_core::GameBooter::pollAndBoot(mGameBooted, mDataRoot, mSaveRoot, ext, mAndroid);
 
         mobile_ui::UIOverlay::get().update(mPad, mSpinFrames);
-        if (mSpinFrames > 0) {
-            float s = (mSpinFrames & 1) ? 2.5f : -2.5f;
-            mPad.accX = s;
-            mPad.accY = s;
-            mSpinFrames--;
-        } else {
-            mPad.accX = 0.0f;
-            mPad.accY = 0.0f;
-        }
+        // A spin press holds the spin button for at least this many frames,
+        // so a tap released before the game samples it still spins.
+        mSpinPulse = mSpinFrames > 0;
+        if (mSpinFrames > 0) mSpinFrames--;
         updateInputState();
 
         if (mobile_ui::UIOverlay::get().settings().haptics) {

@@ -1,6 +1,9 @@
 #pragma once
 
 #include <revolution.h>
+#ifdef TARGET_PC
+#include "port/spin_button.h"
+#endif
 
 class WPad;
 
@@ -25,4 +28,7 @@ public:
     /* 0x21 */ bool mSwingTriggered;
     /* 0x24 */ s32 mSwingHoldFrames;
     /* 0x28 */ s32 mSwingCooldownFrames;
+#ifdef TARGET_PC
+    PortSpinButton mSpinButton;  // the port's spin button, read as a shake (port/spin_button.h)
+#endif
 };

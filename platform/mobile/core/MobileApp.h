@@ -55,7 +55,8 @@ private:
     int mScreenHeight = 0;
 
     PortPadState mPad{};
-    int mSpinFrames = 0;
+    int mSpinFrames = 0;   // frames a spin press keeps the spin button held
+    bool mSpinPulse = false;
     bool mTouchscreenDown = false;
 
     std::string mDataRoot;

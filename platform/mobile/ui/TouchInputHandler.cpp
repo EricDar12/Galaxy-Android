@@ -1,4 +1,5 @@
 #include "TouchInputHandler.h"
+#include "port/spin_button.h"
 
 #include <math.h>
 #include <time.h>
@@ -82,6 +83,7 @@ uint32_t TouchInputHandler::getTouchButtons() const {
     if (mBtnBPressed) b |= 0x0C00;
     if (mBtnZPressed) b |= 0x2000;
     if (mBtnPlusPressed) b |= 0x0010;
+    if (mBtnSpinPressed) b |= PORT_BUTTON_SPIN;
     if (mBtnDpadLeft) b |= 0x0001;
     if (mBtnDpadRight) b |= 0x0002;
     if (mBtnDpadDown) b |= 0x0004;

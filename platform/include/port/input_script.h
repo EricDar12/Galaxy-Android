@@ -1,7 +1,8 @@
 // Scripted controller input for tests (PETARI_INPUT), shared by the headless
 // launcher and the VR app: comma-separated "<t>[-<t1>]:<item>|<item>..."
 // entries (seconds since boot; a single time holds for 0.15 s).  Items: A B 1
-// 2 PLUS MINUS HOME Z C UP DOWN LEFT RIGHT, SPIN (remote shake), SX=<f>
+// 2 PLUS MINUS HOME Z C UP DOWN LEFT RIGHT SPIN (the spin button), SHAKE
+// (a remote shake, as the XR layer makes it), SX=<f>
 // SY=<f> (stick), PX=<f> PY=<f> (pointer), PITCH=<deg> ROLL=<deg> (the right
 // controller's tilt from level: pitched up, then rolled right; negative:
 // down, left).
@@ -15,11 +16,12 @@
 #include <string.h>
 
 #include "port/input.h"
+#include "port/spin_button.h"
 
 typedef struct PortInputEvent {
     int t0, t1;  // ms
     uint32_t buttons;
-    int spin, hasStick, hasPointer, hasTilt;
+    int shake, hasStick, hasPointer, hasTilt;
     float sx, sy, px, py, pitch, roll;
 } PortInputEvent;
 
@@ -28,7 +30,7 @@ static const struct {
     uint32_t bit;
 } kPortScriptButtons[] = {{"LEFT", 0x0001}, {"RIGHT", 0x0002}, {"DOWN", 0x0004}, {"UP", 0x0008},   {"PLUS", 0x0010},
                           {"2", 0x0100},    {"1", 0x0200},     {"B", 0x0400},    {"A", 0x0800},    {"MINUS", 0x1000},
-                          {"Z", 0x2000},    {"C", 0x4000},     {"HOME", 0x8000}};
+                          {"Z", 0x2000},    {"C", 0x4000},     {"HOME", 0x8000}, {"SPIN", PORT_BUTTON_SPIN}};
 
 static inline int portParseInputScript(const char* spec, PortInputEvent* out, int max) {
     int n = 0;
@@ -61,8 +63,8 @@ static inline int portParseInputScript(const char* spec, PortInputEvent* out, in
                 e.hasTilt = 1, e.pitch = (float)atof(item + 6);
             } else if (!strncmp(item, "ROLL=", 5)) {
                 e.hasTilt = 1, e.roll = (float)atof(item + 5);
-            } else if (!strcmp(item, "SPIN")) {
-                e.spin = 1;
+            } else if (!strcmp(item, "SHAKE")) {
+                e.shake = 1;
             } else {
                 int found = 0;
                 for (size_t i = 0; i < sizeof(kPortScriptButtons) / sizeof(kPortScriptButtons[0]); i++) {
@@ -98,7 +100,7 @@ static inline int portApplyInputScript(const PortInputEvent* ev, int count, int 
             pad->downY = -cosf(p) * cosf(r);
             pad->downZ = -sinf(p);
         }
-        if (e->spin) {
+        if (e->shake) {
             // Alternating spikes, like the XR layer's shake.
             float s = ((ms - e->t0) / 16) & 1 ? 2.5f : -2.5f;
             pad->accX = s;

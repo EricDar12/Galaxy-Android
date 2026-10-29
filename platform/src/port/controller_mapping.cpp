@@ -1,4 +1,5 @@
 #include "port/controller_mapping.h"
+#include "port/spin_button.h"
 
 #include <algorithm>
 #include <cmath>
@@ -84,6 +85,7 @@ uint32_t controller_mapping_action_to_wpad(ControllerAction action) {
     case ACTION_DPAD_DOWN:         return 0x0004; // WPAD_BUTTON_DOWN
     case ACTION_DPAD_LEFT:         return 0x0001; // WPAD_BUTTON_LEFT
     case ACTION_DPAD_RIGHT:        return 0x0002; // WPAD_BUTTON_RIGHT
+    case ACTION_SPIN:              return PORT_BUTTON_SPIN; // read as a shake (WPadHVSwing)
     default:                       return 0;
     }
 }

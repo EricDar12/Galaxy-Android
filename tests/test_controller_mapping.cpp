@@ -5,6 +5,7 @@
 
 #include "port/controller_mapping.h"
 #include "port/input.h"
+#include "port/spin_button.h"
 #include "input/GamepadInput.h"
 #include "ui/Settings.h"
 #include "ui/SettingsCodec.h"
@@ -234,6 +235,7 @@ static void testKeyRepeatSpinAndRecenter(void) {
     // Initial press of Spin (West in Standard): spinFrames becomes 6
     gp.handleKey(99 /* WEST */, 0 /* DOWN */, 0, pad, spinFrames);
     assert(spinFrames == 6);
+    assert(gp.buttons() & PORT_BUTTON_SPIN);  // held as the spin button, not a shake
     spinFrames = 4; // Simulate engine countdown
 
     // Android key repeat event (action = DOWN, repeatCount > 0)
@@ -242,6 +244,7 @@ static void testKeyRepeatSpinAndRecenter(void) {
 
     // Release
     gp.handleKey(99, 1 /* UP */, 0, pad, spinFrames);
+    assert(!(gp.buttons() & PORT_BUTTON_SPIN));
 
     // Pointer Recenter (North in Switch Pro)
     Settings s;

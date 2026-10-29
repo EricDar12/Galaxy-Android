@@ -45,11 +45,7 @@ static void wander(PortPadState* pad, int ms) {
     pad->stickX = cosf(ang);
     pad->stickY = sinf(ang);
     if ((h >> 8) % 3u == 0 && t >= 300 && t < 450) pad->buttons |= 0x0800;  // A
-    if ((h >> 12) % 4u == 0 && t >= 800 && t < 1000) {                       // spin
-        float s = (t / 16u) & 1u ? 2.5f : -2.5f;
-        pad->accX = s;
-        pad->accY = s;
-    }
+    if ((h >> 12) % 4u == 0 && t >= 800 && t < 1000) pad->buttons |= PORT_BUTTON_SPIN;  // spin
     if ((h >> 16) % 9u == 0 && t >= 1100 && t < 1400) pad->buttons |= 0x2000;  // Z
     if ((h >> 20) % 7u == 0 && t >= 600 && t < 750) pad->buttons |= 0x0400;     // B: shoots, or backs out of dialogs
 }

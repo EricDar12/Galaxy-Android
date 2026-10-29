@@ -22,6 +22,10 @@ WPadHVSwing::WPadHVSwing(const WPad* pPad, u32 channel) {
     mSwingTriggered = false;
     mSwingHoldFrames = 0;
     mSwingCooldownFrames = 0;
+#ifdef TARGET_PC
+    mSpinButton.heldFrames = 0;
+    mSpinButton.swingFrames = 0;
+#endif
 }
 
 void WPadHVSwing::updateSwing() {
@@ -119,4 +123,16 @@ void WPadHVSwing::update() {
             mIsTriggerSwing = true;
         }
     }
+
+#ifdef TARGET_PC
+    // The spin button shakes the remote (port/spin_button.h).  It rides in
+    // the KPAD sample's hold bits; the Nunchuk keeps its own shake only.
+    if (mChannel == WPAD_DEV_CORE) {
+        KPADStatus* pStatus = pPad->getValidStatusCount() > 0 ? pPad->getKPadStatus(0) : nullptr;
+        bool held = pStatus != nullptr && pStatus->wpad_err == WPAD_ERR_NONE && (pStatus->hold & PORT_BUTTON_SPIN) != 0;
+        PortSpinOutput spin = portSpinButtonStep(&mSpinButton, held);
+        mIsSwing = mIsSwing || spin.swing;
+        mIsTriggerSwing = mIsTriggerSwing || spin.trigger;
+    }
+#endif
 }
