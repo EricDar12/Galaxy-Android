@@ -4,6 +4,7 @@
 #include <deque>
 #include <mutex>
 
+#include "port/heap_routing.h"
 #include "port/port.h"
 #include "revolution/dsp.h"
 #include "revolution/os.h"
@@ -30,6 +31,9 @@ static u16 sMixerLevel = 0x4000;
 extern "C" u32 port_dsp_varam_base(void) { return sVaramBase; }
 
 static void queueMail(u32 a, u32 b) {
+    // Runs on the audio game thread: without this, growing the deque takes a
+    // block from the current JKRHeap, which a stage change destroys and reuses.
+    PortHostAllocScope scope;
     std::lock_guard<std::mutex> lk(sMailMutex);
     sMailFromDsp.push_back(a);
     sMailFromDsp.push_back(b);
