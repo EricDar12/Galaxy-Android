@@ -72,6 +72,12 @@ ControllerButton controller_mapping_from_android_key(int32_t keyCode);
 int controller_mapping_set_action(ControllerMapping* mapping, ControllerButton button, ControllerAction action);
 int controller_mapping_is_valid_action(int action);
 int controller_mapping_is_valid_profile(int profile);
+// The physical button an action is on (the first, with the bumper/trigger
+// swap applied), or BTN_COUNT if it is on none.
+ControllerButton controller_mapping_find_button(const ControllerMapping* mapping, ControllerAction action);
+// What a button is called on every pad ("R1", "L2", "R3", ...), or NULL for
+// those whose name depends on the pad's layout (the face buttons).
+const char* controller_mapping_button_label(ControllerButton button);
 
 #ifdef __cplusplus
 }

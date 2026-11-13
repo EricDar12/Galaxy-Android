@@ -1,6 +1,8 @@
 // The port's controller pointer assist: what the game offered lately, and the
 // state of the rules in port/pad_assist.h.
 #include "port/pad_assist.h"
+#include "port/pad_camera.h"
+#include "port/pad_hint.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,6 +17,8 @@ namespace {
 const int kOfferReads = 3;
 
 std::atomic<int> sEnabled{0};
+std::atomic<int> sHint{0};
+PortCameraStick sCamera;
 PortAssistState sState;
 PortAssistFrame sFrame;
 int sGrabAge[PORT_ASSIST_MAX_GRABS];
@@ -102,16 +106,21 @@ void port_pad_assist_offer_shot(float x, float y) {
 }
 
 float port_pad_assist_collect_radius(void) { return sEnabled.load() ? 900.0f : 0.0f; }
+int port_pad_assist_hint(void) { return sHint.load(); }
 
 void port_pad_assist_apply(PortPadState* pad) {
     if (!sEnabled.load()) {
         pad->buttons &= ~PORT_BUTTON_GRAB;
         memset(&sFrame, 0, sizeof(sFrame));
         memset(&sState, 0, sizeof(sState));
+        memset(&sCamera, 0, sizeof(sCamera));
+        sHint.store(PORT_ASSIST_HINT_NONE);
         return;
     }
     PortPadState before = *pad;
     portPadAssistStep(&sState, &sFrame, pad);
+    portPadCameraStep(&sCamera, pad);
+    sHint.store(portPadAssistHint(&sState, &sFrame));
     // PETARI_ASSISTLOG=1: a line whenever what the assist does changes.
     static const int sLog = getenv("PETARI_ASSISTLOG") ? atoi(getenv("PETARI_ASSISTLOG")) : 0;
     if (sLog) {

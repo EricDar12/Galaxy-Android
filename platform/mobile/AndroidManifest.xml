@@ -30,7 +30,7 @@
          APKs by sideload only.
          extractNativeLibs="true" is likewise required for wrap.sh. -->
     <application
-        android:label="Galaxy Android"
+        android:label="Galaxy - Thor Enhanced"
         android:icon="@mipmap/ic_launcher"
         android:banner="@drawable/banner"
         android:theme="@style/Theme.GalaxyAndroid"

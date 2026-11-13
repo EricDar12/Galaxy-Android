@@ -188,6 +188,27 @@ int controller_mapping_is_valid_action(int action) {
     return (action >= ACTION_NONE && action < ACTION_COUNT) ? 1 : 0;
 }
 
+ControllerButton controller_mapping_find_button(const ControllerMapping* mapping, ControllerAction action) {
+    for (int b = 0; mapping && b < BTN_COUNT; b++) {
+        if (controller_mapping_get_action(mapping, (ControllerButton)b) == action) return (ControllerButton)b;
+    }
+    return BTN_COUNT;
+}
+
+const char* controller_mapping_button_label(ControllerButton button) {
+    switch (button) {
+    case BTN_L1:     return "L1";
+    case BTN_R1:     return "R1";
+    case BTN_L2:     return "L2";
+    case BTN_R2:     return "R2";
+    case BTN_THUMBL: return "L3";
+    case BTN_THUMBR: return "R3";
+    case BTN_START:  return "Start";
+    case BTN_SELECT: return "Select";
+    default:         return nullptr;
+    }
+}
+
 int controller_mapping_is_valid_profile(int profile) {
     return (profile >= CONTROLLER_PROFILE_STANDARD && profile < CONTROLLER_PROFILE_COUNT) ? 1 : 0;
 }

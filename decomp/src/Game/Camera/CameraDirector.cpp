@@ -254,6 +254,15 @@ void CameraDirector::calcPose() {
 
     float rx = 0.0f, ry = 0.0f;
     port_input_get_right_stick(0, &rx, &ry);
+    if (port_pad_assist_enabled()) {
+        // With a gamepad the right stick presses the game's own camera
+        // buttons instead (port/pad_camera.h): this free orbit takes the
+        // camera through floors and off the angles the levels set.
+        rx = 0.0f;
+        ry = 0.0f;
+        sOrbitYaw = 0.0f;
+        sOrbitPitch = 0.0f;
+    }
     if (port_input_camera_inverted()) {
         rx = -rx;
     }

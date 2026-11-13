@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Galaxy Android</string>
+    <string name="app_name">Galaxy - Thor Enhanced</string>
     <string name="header_title">Galaxy Android</string>
     <string name="header_subtitle">Standalone Mobile Port</string>
     <string name="section_source">Game Disc Image</string>
@@ -21,7 +21,7 @@
     <string name="btn_reset_driver">Revert to System Driver</string>
     <string name="driver_system_default">System Default (Vulkan)</string>
     <string name="driver_help_text">Turnip/Adreno drivers are supported on Snapdragon processors. System driver is used for Mali/MediaTek chips.</string>
-    <string name="tester_build_title">OFFICIAL RELEASE v0.0.4b</string>
+    <string name="tester_build_title">THOR ENHANCED PREVIEW 1 (v0.0.4b)</string>
     <string name="tester_build_desc">Join our official community Discord to report bugs, discuss performance, and get support.</string>
     <string name="btn_join_discord">Join Community Discord</string>
 </resources>

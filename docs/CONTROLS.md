@@ -130,6 +130,9 @@ Once a gamepad is in use, nothing in the game needs the Star Pointer, the touchs
 | **Collecting Star Bits** | Star Bits near Mario fly to him by themselves. |
 | **Shooting Star Bits** | **Shoot** fires where Mario is facing; hold to keep firing. Tap the screen to hit an exact spot. |
 | **Menus** (file select, star select, pause menu, galaxy selector, yes / no) | The **left stick** moves the hand cursor, **Jump** confirms. |
+| **Camera** | The **right stick** presses the game's own camera controls: left / right turns the camera a step round Mario (hold to keep turning), up is the first-person view, down puts the camera back behind Mario. Where a level fixes the camera, it stays fixed, as on the Wii. The D-pad does the same turns. |
+
+The first few times a Pull Star, Sling Pod, cannon or bubble comes up, a short prompt on screen names the control (for example *Hold R1 to grab the Pull Star*).
 
 While the gamepad is in use the device's tilt sensors are ignored, so holding the device at an angle never steers the Star Ball or the ray.
 
@@ -141,7 +144,7 @@ Not covered from the gamepad: spinning Mario or a bubble by drawing circles with
 - **Trigger Actuation Threshold**: Configurable analog threshold (`trigger_threshold=0.40`, 10% to 80%). Controls how far L2 / R2 must be pressed before registering in-game crouch or shoot actions.
 - **Trigger / Bumper Swap**: Toggle `swap_triggers_bumpers=1` to switch L1/L2 and R1/R2 on controllers with digital microswitch triggers.
 - **Dual-Stick Camera & Star Pointer Modes**:
-  - `rightStickMode = 0`: Orbital camera rotation around Mario.
+  - `rightStickMode = 0`: Camera. With a gamepad, the game's own stepped camera turns (see above); with touch controls only, a free orbit around Mario.
   - `rightStickMode = 1`: Direct analog Star Pointer navigation with sensitivity scaling (`starStickSensitivity`).
 - **One-Tap Pointer Recenter**: Pressing R3 (Right Stick Click) or the mapped recenter bumper snaps the Star Pointer directly to screen center `(0.0, 0.0)`.
 

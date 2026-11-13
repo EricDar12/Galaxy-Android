@@ -4,7 +4,8 @@
 // 2 PLUS MINUS HOME Z C UP DOWN LEFT RIGHT SPIN (the spin button), GRAB (the
 // grab button, port/pad_assist.h), SHAKE
 // (a remote shake, as the XR layer makes it), SX=<f>
-// SY=<f> (stick), PX=<f> PY=<f> (pointer), PITCH=<deg> ROLL=<deg> (the right
+// SY=<f> (stick), RX=<f> RY=<f> (right stick, right / up positive), PX=<f>
+// PY=<f> (pointer), PITCH=<deg> ROLL=<deg> (the right
 // controller's tilt from level: pitched up, then rolled right; negative:
 // down, left).
 // Example: PETARI_INPUT="22:A,26:A,30-33:SY=1|A"
@@ -23,8 +24,8 @@
 typedef struct PortInputEvent {
     int t0, t1;  // ms
     uint32_t buttons;
-    int shake, hasStick, hasPointer, hasTilt;
-    float sx, sy, px, py, pitch, roll;
+    int shake, hasStick, hasPointer, hasTilt, hasRightStick;
+    float sx, sy, px, py, pitch, roll, rx, ry;
 } PortInputEvent;
 
 static const struct {
@@ -58,6 +59,10 @@ static inline int portParseInputScript(const char* spec, PortInputEvent* out, in
                 e.hasStick = 1, e.sx = (float)atof(item + 3);
             } else if (!strncmp(item, "SY=", 3)) {
                 e.hasStick = 1, e.sy = (float)atof(item + 3);
+            } else if (!strncmp(item, "RX=", 3)) {
+                e.hasRightStick = 1, e.rx = (float)atof(item + 3);
+            } else if (!strncmp(item, "RY=", 3)) {
+                e.hasRightStick = 1, e.ry = (float)atof(item + 3);
             } else if (!strncmp(item, "PX=", 3)) {
                 e.hasPointer = 1, e.px = (float)atof(item + 3);
             } else if (!strncmp(item, "PY=", 3)) {
@@ -94,6 +99,8 @@ static inline int portApplyInputScript(const PortInputEvent* ev, int count, int 
         active = 1;
         pad->buttons |= e->buttons;
         if (e->hasStick) pad->stickX = e->sx, pad->stickY = e->sy;
+        // PortPadState's right stick is left-positive (the camera orbit's sense).
+        if (e->hasRightStick) pad->rightStickX = -e->rx, pad->rightStickY = e->ry;
         if (e->hasPointer) pad->pointerValid = 1, pad->pointerX = e->px, pad->pointerY = e->py;
         if (e->hasTilt) {
             // Down in the controller's axes (x right, y up, z where it aims).

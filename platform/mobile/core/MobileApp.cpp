@@ -10,6 +10,7 @@
 #include <unistd.h>
 
 #include "GameBooter.h"
+#include "PadHints.h"
 #include "dvd/dvd_internal.h"
 #include "../input/Sensors.h"
 #include "../render/ScenePresenter.h"
@@ -18,7 +19,6 @@
 #include "../system/SystemManager.h"
 #include "../ui/UIOverlay.h"
 #include "gx/vk_shader_inventory.h"
-#include "port/pad_assist.h"
 #include "port/port.h"
 #include "port/spin_button.h"
 
@@ -256,8 +256,8 @@ void MobileApp::run(android_app* app, uintptr_t windowBase, size_t windowSize) {
         mSpinPulse = mSpinFrames > 0;
         if (mSpinFrames > 0) mSpinFrames--;
         // Once a gamepad is in use the game is played from its sticks and
-        // buttons: no pointing or tilting needed (port/pad_assist.h).
-        port_pad_assist_set_enabled(mGamepad.isGamepadDetected() ? 1 : 0);
+        // buttons: no pointing or tilting needed (PadHints.h).
+        updatePadAssist(mGamepad);
         updateInputState();
 
         if (mobile_ui::UIOverlay::get().settings().haptics) {
