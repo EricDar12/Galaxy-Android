@@ -14,6 +14,7 @@
 #include "Game/Util/MathUtil.hpp"
 #include "Game/Util/MtxUtil.hpp"
 #include "Game/Util/ObjUtil.hpp"
+#include "Game/Util/PadAssistUtil.hpp"
 #include "Game/Util/PlayerUtil.hpp"
 #include "Game/Util/SoundUtil.hpp"
 #include "Game/Util/StarPointerUtil.hpp"
@@ -307,6 +308,11 @@ void AstroDomeBlueStar::exeWait() {
         MR::tryShowTimeoutedStarPointerGuidance();
     }
 
+#ifdef TARGET_PC
+    if (isValidBindStart()) {
+        MR::offerPadAssistGrab(this, 0);
+    }
+#endif
     if (isValidBindStart() && MR::isStarPointerPointing(this, WPAD_CHAN0, true, "\x8e\xe3")) {
         setNerve(GET_NERVE(AstroDomeBlueStar, AstroDomeBlueStarNrvPointing));
     }
@@ -324,6 +330,9 @@ void AstroDomeBlueStar::exePointing() {
     }
 
     MR::requestStarPointerModeBlueStarReady(this);
+#ifdef TARGET_PC
+    MR::offerPadAssistGrab(this, 0);
+#endif
 
     MR::startLevelSound(this, "SE_OJ_LV_MAGIC_PNT_G_POINT");
 
@@ -356,6 +365,9 @@ void AstroDomeBlueStar::exeTryStartBind() {
     }
 
     MR::requestStarPointerModeBlueStarReady(this);
+#ifdef TARGET_PC
+    MR::offerPadAssistGrab(this, PAD_ASSIST_GRAB_ACTIVE);
+#endif
 
     TVec3f resultPoint;
     resultPoint.lerp(mCaptureActor->mPosition, *MR::getPlayerCenterPos(), MR::calcNerveRate(this, ::cTryStartBindFrame));

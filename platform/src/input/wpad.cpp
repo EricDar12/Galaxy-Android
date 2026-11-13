@@ -5,6 +5,7 @@
 #include <mutex>
 
 #include "port/input.h"
+#include "port/pad_assist.h"
 #include "port/spin_button.h"
 #include "port/port.h"
 #include "revolution/kpad.h"
@@ -105,14 +106,21 @@ static Vec remoteGravity(const PortPadState& s) {
         sFilteredTiltY = 0.0f;
         return g;
     }
-    // A controller whose orientation is unknown counts as held level.
-    Vec down = s.tilted ? Vec{s.downX, s.downY, s.downZ} : Vec{0.0f, -1.0f, 0.0f};
-    if (!s.tilted) {
+    // A controller whose orientation is unknown counts as held level.  With
+    // the pad assist the sticks steer (the rides read them directly) and the
+    // device's own tilt is left out of it: what still reads this gravity,
+    // the rides' tutorials, gets the stick as a tilt.
+    bool tilted = s.tilted && !port_pad_assist_enabled();
+    Vec down = tilted ? Vec{s.downX, s.downY, s.downZ} : Vec{0.0f, -1.0f, 0.0f};
+    if (!tilted) {
         // Fallback for mobile touchscreen and gamepads: steer ball and surfing ray using analog stick.
         // Responsive stick-to-tilt mapping:
         float maxDelta = (sTiltNeutralPitch.load() == 0.0f) ? 0.12f : 0.06f;
         float targetX = s.stickX;
-        float targetY = s.stickY;
+        // The ray only rolls; with the pad assist, pushing the stick up or
+        // down as well must not read as standing the remote up, which its
+        // tutorial counts as a mistake.
+        float targetY = (port_pad_assist_enabled() && sTiltNeutralPitch.load() == 0.0f) ? 0.0f : s.stickY;
         float dx = targetX - sFilteredTiltX;
         float dy = targetY - sFilteredTiltY;
         if (dx > maxDelta) sFilteredTiltX += maxDelta;
@@ -243,6 +251,11 @@ s32 KPADRead(s32 chan, KPADStatus samples[], u32 length) {
     }
     PortPadState s = snapshot(chan);
     pollConnection(chan, s);
+    if (chan == 0 && s.connected) {
+        // The gamepad's stand-ins for pointing: may move the pointer and
+        // press A or B (port/pad_assist.h).
+        port_pad_assist_apply(&s);
+    }
     KPADStatus* k = &samples[0];
     memset(k, 0, sizeof(*k));
     if (!s.connected) {

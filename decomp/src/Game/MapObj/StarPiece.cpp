@@ -18,6 +18,7 @@
 #include "Game/Util/MathUtil.hpp"
 #include "Game/Util/NerveUtil.hpp"
 #include "Game/Util/ObjUtil.hpp"
+#include "Game/Util/PadAssistUtil.hpp"
 #include "Game/Util/PlayerUtil.hpp"
 #include "Game/Util/SoundUtil.hpp"
 #include "Game/Util/StarPointerUtil.hpp"
@@ -1096,6 +1097,13 @@ void StarPiece::tryGotJudge() {
     if (mGettableDelayCounter < 0) {
         bool isPointing = MR::isStarPointerPointing1Por2P(this, "\x8e\xe3", false, false);
         MR::getStarPointerLastPointedPort(this);
+#ifdef TARGET_PC
+        // With a gamepad there is no pointer to sweep over star bits: the
+        // ones near Mario come to him.
+        if (!isPointing && MR::isPadAssistCollect(mPosition)) {
+            isPointing = true;
+        }
+#endif
 
         if (isPointing == true) {
             goToPlayer(TVec3f(_8C));

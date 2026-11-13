@@ -128,6 +128,11 @@ int main(int argc, char** argv) {
         *traceNerves = atoi(envSet("PETARI_NERVES"));
     }
     void (*inputSet)(int, const PortPadState*) = (void (*)(int, const PortPadState*))dlsym(lib, "port_input_set");
+    // The gamepad's stand-ins for pointing and tilting (port/pad_assist.h)
+    // are on, as on a device with a gamepad; PETARI_ASSIST=0 plays as the
+    // pointer and tilt build (PX/PY and PITCH/ROLL then do it all).
+    void (*assistSet)(int) = (void (*)(int))dlsym(lib, "port_pad_assist_set_enabled");
+    if (assistSet) assistSet(envSet("PETARI_ASSIST") ? atoi(envSet("PETARI_ASSIST")) : 1);
     static PortInputEvent events[1024];
     int eventCount = envSet("PETARI_INPUT") ? portParseInputScript(envSet("PETARI_INPUT"), events, 1024) : 0;
     PortPadState pad;

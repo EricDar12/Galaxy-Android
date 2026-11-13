@@ -22,6 +22,7 @@
 #include "Game/Util/MathUtil.hpp"
 #include "Game/Util/MtxUtil.hpp"
 #include "Game/Util/ObjUtil.hpp"
+#include "Game/Util/PadAssistUtil.hpp"
 #include "Game/Util/PlayerUtil.hpp"
 #include "Game/Util/SoundUtil.hpp"
 #include "Game/Util/StarPointerUtil.hpp"
@@ -226,6 +227,9 @@ void MarioLauncher::exeAim() {
         MR::hideModel(this);
     }
 
+#ifdef TARGET_PC
+    MR::offerPadAssistCursor();
+#endif
     mLayout->appearAt(MR::getStarPointerScreenPositionOrEdge(WPAD_CHAN0));
 
     MR::requestMarioLauncherGuidance();

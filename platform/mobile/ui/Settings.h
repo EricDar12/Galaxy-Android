@@ -112,7 +112,7 @@ struct Settings {
         2,  // BTN_WEST = ACTION_SPIN
         2,  // BTN_NORTH = ACTION_SPIN
         5,  // BTN_L1 = ACTION_CAMERA_SNAP
-        6,  // BTN_R1 = ACTION_POINTER_RECENTER
+        12, // BTN_R1 = ACTION_GRAB
         4,  // BTN_L2 = ACTION_CROUCH_GROUNDPOUND
         3,  // BTN_R2 = ACTION_SHOOT_CANCEL
         4,  // BTN_THUMBL = ACTION_CROUCH_GROUNDPOUND

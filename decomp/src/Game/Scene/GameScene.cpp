@@ -303,12 +303,14 @@ void GameScene::update() {
         }
     }
     {
-        // Debug: PETARI_POSLOG=1 logs the player's position once a second.
-        static const bool posLog = getenv("PETARI_POSLOG") != nullptr;
+        // Debug: PETARI_POSLOG=1 logs the player's position and star bits
+        // once a second; PETARI_POSLOG=<n> every n frames.
+        static const s32 posLog = getenv("PETARI_POSLOG") != nullptr ? atoi(getenv("PETARI_POSLOG")) : 0;
         static s32 sPosFrames = 0;
-        if (posLog && MR::isExistMario() && isNerve(GET_NERVE(GameScene, GameSceneAction)) && ++sPosFrames % 60 == 0) {
+        if (posLog > 0 && MR::isExistMario() && isNerve(GET_NERVE(GameScene, GameSceneAction)) && ++sPosFrames % (posLog > 1 ? posLog : 60) == 0) {
             const TVec3f* p = MR::getPlayerPos();
-            OSReport("port: player at %.1f %.1f %.1f%s\n", p->x, p->y, p->z, MR::isOnGroundPlayer() ? " (on the ground)" : "");
+            OSReport("port: player at %.1f %.1f %.1f%s, %d star bits\n", p->x, p->y, p->z, MR::isOnGroundPlayer() ? " (on the ground)" : "",
+                     (int)MR::getStarPieceNum());
         }
     }
     {

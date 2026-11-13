@@ -20,7 +20,8 @@ typedef enum ControllerAction {
     ACTION_DPAD_DOWN = 9,         // Wii D-Pad Down (0x0004)
     ACTION_DPAD_LEFT = 10,        // Wii D-Pad Left (0x0001)
     ACTION_DPAD_RIGHT = 11,       // Wii D-Pad Right (0x0002)
-    ACTION_COUNT = 12
+    ACTION_GRAB = 12,             // Grab what is in reach: Pull Stars, Sling Pods (PORT_BUTTON_GRAB, port/pad_assist.h)
+    ACTION_COUNT = 13
 } ControllerAction;
 
 // Pre-configured native controller layout profiles

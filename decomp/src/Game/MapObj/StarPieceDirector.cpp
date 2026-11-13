@@ -5,6 +5,7 @@
 #include "Game/Scene/SceneObjHolder.hpp"
 #include "Game/Screen/StarPointerDirector.hpp"
 #include "Game/Util.hpp"
+#include "Game/Util/PadAssistUtil.hpp"
 
 void StarPieceDirector_FORCE_MATCH_SDATA2() {
     (void)0.0f;
@@ -416,6 +417,11 @@ void StarPieceShooter::attackSensor(HitSensor* pSender, HitSensor* pReceiver) {
 }
 
 void StarPieceShooter::control() {
+#ifdef TARGET_PC
+    if (_A0 == WPAD_CHAN0 && MR::getStarPieceNum() > 0 && MR::isEnableStarPointerShootStarPiece(_A0)) {
+        MR::offerPadAssistShot();
+    }
+#endif
     tryShoot();
 
     TVec3f playerCenterPos(*MR::getPlayerCenterPos());

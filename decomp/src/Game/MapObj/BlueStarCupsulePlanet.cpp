@@ -13,6 +13,7 @@
 #include "Game/Util/JointUtil.hpp"
 #include "Game/Util/LiveActorUtil.hpp"
 #include "Game/Util/ObjUtil.hpp"
+#include "Game/Util/PadAssistUtil.hpp"
 #include "Game/Util/PlayerUtil.hpp"
 #include "Game/Util/SoundUtil.hpp"
 #include "Game/Util/StarPointerUtil.hpp"
@@ -187,6 +188,11 @@ void BlueStarCupsulePlanet::exePointable() {
     }
     MR::noticeInTouchableRange();
     updatePose();
+#ifdef TARGET_PC
+    if (isPointable()) {
+        MR::offerPadAssistGrab(this, 0);
+    }
+#endif
 
     if (!isPointable()) {
         setNerve(GET_NERVE(BlueStarCupsulePlanet, BlueStarCupsulePlanetNrvWait));
@@ -217,6 +223,11 @@ void BlueStarCupsulePlanet::exeHitPointer() {
     MR::startLevelSound(this, "SE_OJ_LV_MAGIC_PNT_G_POINT");
 
     bool pointable = isPointable();
+#ifdef TARGET_PC
+    if (pointable) {
+        MR::offerPadAssistGrab(this, 0);
+    }
+#endif
     if (MR::isStarPointerPointing(this, WPAD_CHAN0, true, "\x8e\xe3") && pointable) {
         MR::requestGCaptureTarget(this);
     }
@@ -235,6 +246,9 @@ void BlueStarCupsulePlanet::exeActive() {
 
     updatePose();
     MR::noticeInTouchableRange();
+#ifdef TARGET_PC
+    MR::offerPadAssistGrab(this, PAD_ASSIST_GRAB_ACTIVE);
+#endif
     MR::startLevelSound(this, "SE_OJ_LV_MAGIC_PNT_G_PULL", MR::calcDistanceToPlayer(this));
     MR::startLevelSound(this, "SE_OJ_LV_MAGIC_PNT_G_POINT");
 }

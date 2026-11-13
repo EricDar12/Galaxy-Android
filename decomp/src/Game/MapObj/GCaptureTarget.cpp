@@ -14,6 +14,7 @@
 #include "Game/Util/JMapUtil.hpp"
 #include "Game/Util/LiveActorUtil.hpp"
 #include "Game/Util/ObjUtil.hpp"
+#include "Game/Util/PadAssistUtil.hpp"
 #include "Game/Util/SoundUtil.hpp"
 #include "Game/Util/StarPointerUtil.hpp"
 #include <JSystem/JGeometry/TVec.hpp>
@@ -208,6 +209,9 @@ void GCaptureTarget::exePointable() {
     if (!MR::isJudgedToClipFrustum(mPosition, 50.0f)) {
         MR::noticeInTouchableRange();
     }
+#ifdef TARGET_PC
+    MR::offerPadAssistGrab(this, 0);
+#endif
 
     mStarAnimSpeed += 0.05f;
     if (mStarAnimSpeed > 0.5f) {
@@ -231,6 +235,9 @@ void GCaptureTarget::exeHitPointer() {
     if (!MR::isRequestedGCaptureTarget(this)) {
         setNerve(GET_NERVE(GCaptureTarget, GCaptureTargetNrvWait));
     } else {
+#ifdef TARGET_PC
+        MR::offerPadAssistGrab(this, 0);
+#endif
         MR::requestStarPointerModeBlueStarReady(this);
         if (MR::isFirstStep(this)) {
             emitNerveEffect();
@@ -269,6 +276,9 @@ void GCaptureTarget::exeActive() {
     }
 
     MR::noticeInTouchableRange();
+#ifdef TARGET_PC
+    MR::offerPadAssistGrab(this, PAD_ASSIST_GRAB_ACTIVE);
+#endif
     MR::startLevelSound(this, "SE_OJ_LV_MAGIC_PNT_G_PULL", MR::calcDistanceToPlayer(this));
     MR::startLevelSound(this, "SE_OJ_LV_MAGIC_PNT_G_POINT");
 }

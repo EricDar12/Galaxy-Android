@@ -19,6 +19,7 @@
 #include "Game/Util/LiveActorUtil.hpp"
 #include "Game/Util/MathUtil.hpp"
 #include "Game/Util/ObjUtil.hpp"
+#include "Game/Util/PadAssistUtil.hpp"
 #include "Game/Util/PlayerUtil.hpp"
 #include "Game/Util/SoundUtil.hpp"
 #include "Game/Util/StarPointerUtil.hpp"
@@ -478,6 +479,9 @@ bool SpaceCocoon::receiveOtherMsg(u32 msg, HitSensor* pSender, HitSensor* pRecei
 
 bool SpaceCocoon::updateBindWait() {
     if (MR::getPlayerPos()->distance(mPosition) < ::sDistanceBindCancel && (!isKinopioAttached() || MR::isOnGroundPlayer())) {
+#ifdef TARGET_PC
+        MR::offerPadAssistGrab(this, PAD_ASSIST_GRAB_RIDING);
+#endif
         if (MR::isStarPointerPointing(this, WPAD_CHAN0, true, "\x8e\xe3")) {
             MR::requestStarPointerModeBlueStarReady(this);
         }
@@ -532,6 +536,10 @@ bool SpaceCocoon::updateSpringPoint() {
 
 void SpaceCocoon::updateHang() {
     f32 dist = mPosition.distance(mNeutralPos);
+#ifdef TARGET_PC
+    // A full stick pulls a little past the limit, so it reaches it.
+    MR::offerPadAssistSling(mNeutralPos, ::sDistanceMax * 1.2f);
+#endif
 
     if (MR::isStarPointerInScreen(mPadChannel) && ::sPlayerDistanceToHang > dist) {
         f32 dummy = 0.0f;

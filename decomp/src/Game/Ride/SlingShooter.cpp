@@ -15,6 +15,7 @@
 #include "Game/Util/LiveActorUtil.hpp"
 #include "Game/Util/MathUtil.hpp"
 #include "Game/Util/ObjUtil.hpp"
+#include "Game/Util/PadAssistUtil.hpp"
 #include "Game/Util/PlayerUtil.hpp"
 #include "Game/Util/SoundUtil.hpp"
 #include "Game/Util/StarPointerUtil.hpp"
@@ -497,6 +498,9 @@ void SlingShooter::calcBaseMtx(TPos3f* pBaseMtx) {
 
 bool SlingShooter::updateWait() {
     mPosition.set(*mBasePos);
+#ifdef TARGET_PC
+    MR::offerPadAssistGrab(this, PAD_ASSIST_GRAB_RIDING);
+#endif
 
     if (MR::isStarPointerPointing(this, WPAD_CHAN0, true, "\x8e\xe3")) {
         MR::requestStarPointerModeBlueStarReady(this);
@@ -537,6 +541,10 @@ bool SlingShooter::updateWait() {
 
 void SlingShooter::updateHang() {
     f32 dist = mPosition.distance(*mNeutralPos);
+#ifdef TARGET_PC
+    // A full stick pulls a little past the limit, so it reaches it.
+    MR::offerPadAssistSling(*mNeutralPos, ::sAimDistanceMax * 1.2f);
+#endif
 
     if (MR::isStarPointerInScreen(mPadChannel)) {
         MR::calcStarPointerPosOnPlane(&mPointerPos, *mNeutralPos, TVec3f(0.0f, 0.0f, 1.0f), mPadChannel, false);

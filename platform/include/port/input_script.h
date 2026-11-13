@@ -1,7 +1,8 @@
 // Scripted controller input for tests (PETARI_INPUT), shared by the headless
 // launcher and the VR app: comma-separated "<t>[-<t1>]:<item>|<item>..."
 // entries (seconds since boot; a single time holds for 0.15 s).  Items: A B 1
-// 2 PLUS MINUS HOME Z C UP DOWN LEFT RIGHT SPIN (the spin button), SHAKE
+// 2 PLUS MINUS HOME Z C UP DOWN LEFT RIGHT SPIN (the spin button), GRAB (the
+// grab button, port/pad_assist.h), SHAKE
 // (a remote shake, as the XR layer makes it), SX=<f>
 // SY=<f> (stick), PX=<f> PY=<f> (pointer), PITCH=<deg> ROLL=<deg> (the right
 // controller's tilt from level: pitched up, then rolled right; negative:
@@ -16,6 +17,7 @@
 #include <string.h>
 
 #include "port/input.h"
+#include "port/pad_assist.h"
 #include "port/spin_button.h"
 
 typedef struct PortInputEvent {
@@ -30,7 +32,8 @@ static const struct {
     uint32_t bit;
 } kPortScriptButtons[] = {{"LEFT", 0x0001}, {"RIGHT", 0x0002}, {"DOWN", 0x0004}, {"UP", 0x0008},   {"PLUS", 0x0010},
                           {"2", 0x0100},    {"1", 0x0200},     {"B", 0x0400},    {"A", 0x0800},    {"MINUS", 0x1000},
-                          {"Z", 0x2000},    {"C", 0x4000},     {"HOME", 0x8000}, {"SPIN", PORT_BUTTON_SPIN}};
+                          {"Z", 0x2000},    {"C", 0x4000},     {"HOME", 0x8000}, {"SPIN", PORT_BUTTON_SPIN},
+                          {"GRAB", PORT_BUTTON_GRAB}};
 
 static inline int portParseInputScript(const char* spec, PortInputEvent* out, int max) {
     int n = 0;

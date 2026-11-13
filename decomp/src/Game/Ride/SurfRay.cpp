@@ -16,6 +16,7 @@
 #include "Game/Util/MathUtil.hpp"
 #include "Game/Util/MtxUtil.hpp"
 #include "Game/Util/ObjUtil.hpp"
+#include "Game/Util/PadAssistUtil.hpp"
 #include "Game/Util/PlayerUtil.hpp"
 #include "Game/Util/ScreenUtil.hpp"
 #include "Game/Util/SequenceUtil.hpp"
@@ -842,8 +843,14 @@ void SurfRay::updateRotate() {
 
     if (isRotateStart()) {
         TVec3f accel(0.0f, 0.0f, 0.0f);
-        port_input_use_tilt(0.0f);  // neutral: level
-        MR::getCorePadAcceleration(&accel, mPadChannel);
+        if (MR::isPadAssist()) {
+            // With a gamepad the stick is the twist of the remote: pushed
+            // right over, the remote on its side.
+            accel.set< f32 >(MR::getSubPadStickX(mPadChannel), 0.0f, 1.0f);
+        } else {
+            port_input_use_tilt(0.0f);  // neutral: level
+            MR::getCorePadAcceleration(&accel, mPadChannel);
+        }
 
         if (accel.z > -0.7f || MR::abs(accel.x) > 0.15f) {
             f32 twistAngle = accel.x;

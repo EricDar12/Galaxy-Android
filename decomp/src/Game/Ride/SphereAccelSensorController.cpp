@@ -1,6 +1,7 @@
 #include "Game/Ride/SphereAccelSensorController.hpp"
 #include "Game/Util/GamePadUtil.hpp"
 #include "Game/Util/MathUtil.hpp"
+#include "Game/Util/PadAssistUtil.hpp"
 #include <JSystem/JMath/JMATrigonometric.hpp>
 #include <JSystem/JMath/JMath.hpp>
 #include <revolution/wpad.h>
@@ -77,6 +78,14 @@ void SphereAccelSensorController::update(const TVec3f&) {
 }
 
 void SphereAccelSensorController::clacXY(f32* pX, f32* pY) {
+#ifdef TARGET_PC
+    if (MR::isPadAssist()) {
+        // With a gamepad the ball rolls where the stick points, as
+        // SpherePadController steers it, instead of by the remote's tilt.
+        SpherePadController::clacXY(pX, pY);
+        return;
+    }
+#endif
     f32 accelMargine = isCorePad() ? MR::toRadian(::sCoreAccelDegreMargine) : MR::toRadian(::sSubAccelDegreMargine);
     f32 accelRange = isCorePad() ? MR::toRadian(::sCoreAccelDegreeRange) : MR::toRadian(::sSubAccelDegreeRange);
     f32 accelRangeY = isCorePad() ? MR::toRadian(::sCoreAccelDegreeRangeY) : MR::toRadian(::sSubAccelDegreeRangeY);

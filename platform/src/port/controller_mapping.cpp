@@ -1,4 +1,5 @@
 #include "port/controller_mapping.h"
+#include "port/pad_assist.h"
 #include "port/spin_button.h"
 
 #include <algorithm>
@@ -30,7 +31,7 @@ ControllerMapping controller_mapping_get_default(ControllerProfile profile) {
         m.buttonActions[BTN_WEST]  = ACTION_SPIN;              // Physical Y
         m.buttonActions[BTN_NORTH] = ACTION_POINTER_RECENTER;  // Physical X
         m.buttonActions[BTN_L1]    = ACTION_CAMERA_SNAP;
-        m.buttonActions[BTN_R1]    = ACTION_SPIN;
+        m.buttonActions[BTN_R1]    = ACTION_GRAB;
         m.buttonActions[BTN_L2]    = ACTION_CROUCH_GROUNDPOUND;
         m.buttonActions[BTN_R2]    = ACTION_SHOOT_CANCEL;
         break;
@@ -41,7 +42,7 @@ ControllerMapping controller_mapping_get_default(ControllerProfile profile) {
         m.buttonActions[BTN_WEST]  = ACTION_SPIN;              // B button
         m.buttonActions[BTN_NORTH] = ACTION_POINTER_RECENTER;  // X button
         m.buttonActions[BTN_L1]    = ACTION_SPIN;              // Z trigger
-        m.buttonActions[BTN_R1]    = ACTION_CAMERA_SNAP;
+        m.buttonActions[BTN_R1]    = ACTION_GRAB;
         m.buttonActions[BTN_L2]    = ACTION_CROUCH_GROUNDPOUND;// L trigger
         m.buttonActions[BTN_R2]    = ACTION_SHOOT_CANCEL;     // R trigger
         break;
@@ -54,7 +55,7 @@ ControllerMapping controller_mapping_get_default(ControllerProfile profile) {
         m.buttonActions[BTN_WEST]  = ACTION_SPIN;              // X button
         m.buttonActions[BTN_NORTH] = ACTION_SPIN;              // Y button
         m.buttonActions[BTN_L1]    = ACTION_CAMERA_SNAP;       // LB
-        m.buttonActions[BTN_R1]    = ACTION_POINTER_RECENTER;  // RB
+        m.buttonActions[BTN_R1]    = ACTION_GRAB;              // RB
         m.buttonActions[BTN_L2]    = ACTION_CROUCH_GROUNDPOUND;// LT
         m.buttonActions[BTN_R2]    = ACTION_SHOOT_CANCEL;     // RT
         break;
@@ -86,6 +87,7 @@ uint32_t controller_mapping_action_to_wpad(ControllerAction action) {
     case ACTION_DPAD_LEFT:         return 0x0001; // WPAD_BUTTON_LEFT
     case ACTION_DPAD_RIGHT:        return 0x0002; // WPAD_BUTTON_RIGHT
     case ACTION_SPIN:              return PORT_BUTTON_SPIN; // read as a shake (WPadHVSwing)
+    case ACTION_GRAB:              return PORT_BUTTON_GRAB; // points and holds A for the player (pad_assist.h)
     default:                       return 0;
     }
 }

@@ -25,19 +25,19 @@ static void testStandardSwitchGamecubeProfiles(void) {
     assert(controller_mapping_get_action(&stdMap, BTN_WEST) == ACTION_SPIN);
     assert(controller_mapping_get_action(&stdMap, BTN_L1) == ACTION_CAMERA_SNAP);
     assert(controller_mapping_get_action(&stdMap, BTN_L2) == ACTION_CROUCH_GROUNDPOUND);
-    assert(controller_mapping_get_action(&stdMap, BTN_R1) == ACTION_POINTER_RECENTER);
+    assert(controller_mapping_get_action(&stdMap, BTN_R1) == ACTION_GRAB);
 
     ControllerMapping swMap = controller_mapping_get_default(CONTROLLER_PROFILE_SWITCH);
     assert(controller_mapping_get_action(&swMap, BTN_SOUTH) == ACTION_JUMP);
     assert(controller_mapping_get_action(&swMap, BTN_WEST) == ACTION_SPIN);
     assert(controller_mapping_get_action(&swMap, BTN_NORTH) == ACTION_POINTER_RECENTER);
-    assert(controller_mapping_get_action(&swMap, BTN_R1) == ACTION_SPIN);
+    assert(controller_mapping_get_action(&swMap, BTN_R1) == ACTION_GRAB);
 
     ControllerMapping gcMap = controller_mapping_get_default(CONTROLLER_PROFILE_GAMECUBE);
     assert(controller_mapping_get_action(&gcMap, BTN_SOUTH) == ACTION_JUMP);
     assert(controller_mapping_get_action(&gcMap, BTN_WEST) == ACTION_SPIN);
     assert(controller_mapping_get_action(&gcMap, BTN_L1) == ACTION_SPIN);
-    assert(controller_mapping_get_action(&gcMap, BTN_R1) == ACTION_CAMERA_SNAP);
+    assert(controller_mapping_get_action(&gcMap, BTN_R1) == ACTION_GRAB);
     assert(controller_mapping_get_action(&gcMap, BTN_L2) == ACTION_CROUCH_GROUNDPOUND);
     printf("[PASS] Standard, Switch Pro, and GameCube profile mappings verified\n");
 }

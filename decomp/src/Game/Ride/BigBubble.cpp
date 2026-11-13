@@ -7,6 +7,7 @@
 #include "Game/MapObj/ElectricRailHolder.hpp"
 #include "Game/Scene/SceneFunction.hpp"
 #include "Game/Util.hpp"
+#include "Game/Util/PadAssistUtil.hpp"
 #include "Game/Util/OctahedronBezierSurface.hpp"
 #include <JSystem/JMath/JMATrigonometric.hpp>
 #include <revolution/gx/GXTev.h>
@@ -937,6 +938,14 @@ void BigBubble::addAccelMoment(s32 padChannel) {
 
 bool BigBubble::addAccelPointing(s32 padChannel) {
     mPointAccel = 0.0f;
+#ifdef TARGET_PC
+    if (padChannel == WPAD_CHAN0) {
+        // Clear of the bubble itself (pointing at it does not blow), and
+        // from a light breath at the far end to nearly the hardest.
+        f32 nearDist = MR::max(getSize() * 1.25f, ::sPointAccelDistanceMin + 100.0f);
+        MR::offerPadAssistBubble(mPosition, nearDist, MR::max(nearDist + 100.0f, ::sPointAccelDistanceMax * 0.7f));
+    }
+#endif
     if (!MR::testCorePadButtonA(padChannel)) {
         return false;
     }
