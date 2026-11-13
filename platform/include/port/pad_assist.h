@@ -10,7 +10,7 @@
 //       offer and A is held: grabs Pull Stars and Sling Pods.  The left stick
 //       picks between several, and stretches a pod once it is held; letting
 //       go of the button lets go of A.
-//   cannon      the left stick moves the pointer about the screen.
+//   cannon, menus   the left stick moves the pointer about the screen.
 //   bubble      the left stick blows: the pointer sits on the far side of
 //               the bubble, nearer the harder the stick is pushed.
 //   B           with no pointer on screen, star bits fly where Mario faces.
@@ -67,7 +67,8 @@ typedef struct PortAssistFrame {
     // farDist (gentle) away.
     int bubble;
     float bubbleX, bubbleY, bubbleUX, bubbleUY, bubbleNear, bubbleFar;
-    int cursor;  // the stick moves the pointer freely (cannon)
+    int cursor;  // the stick moves the pointer freely (cannon, menus)
+    float cursorSpeed;  // 1: the cannon's pace
     int shot;    // star bits can be shot: where B aims them
     float shotX, shotY;
 } PortAssistFrame;
@@ -196,7 +197,7 @@ static inline void portPadAssistStep(PortAssistState* st, const PortAssistFrame*
             // view turns with the pointer as well); the screen is wider
             // than tall, so y covers its range faster.
             float m = portAssistClamp(mag, 0.0f, 1.0f);
-            float speed = 0.004f + 0.018f * m * m;
+            float speed = (0.004f + 0.018f * m * m) * (in->cursorSpeed > 0.0f ? in->cursorSpeed : 1.0f);
             st->cursorX = portAssistClamp(st->cursorX + sx * speed, -0.95f, 0.95f);
             st->cursorY = portAssistClamp(st->cursorY - sy * speed * 1.6f, -0.95f, 0.95f);
             portAssistPoint(pad, st->cursorX, st->cursorY);
@@ -252,7 +253,7 @@ int port_pad_assist_enabled(void);
 void port_pad_assist_offer_grab(const void* id, float x, float y, float dirX, float dirY, float dist, uint32_t flags);
 void port_pad_assist_offer_sling(float x, float y, float ux, float uy, float reach);
 void port_pad_assist_offer_bubble(float x, float y, float ux, float uy, float nearDist, float farDist);
-void port_pad_assist_offer_cursor(void);
+void port_pad_assist_offer_cursor(float speed);
 void port_pad_assist_offer_shot(float x, float y);
 // Star bits this close to Mario fly to him by themselves (world units; 0:
 // they do not).

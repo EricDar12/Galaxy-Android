@@ -262,6 +262,14 @@ static void testCursor() {
     pad = padWith(0);
     portPadAssistStep(&st, &in, &pad);
     assert(near(pad.pointerX, 0.0f));
+    // Menus ask for a quicker hand than the cannon's.
+    memset(&st, 0, sizeof(st));
+    in.cursorSpeed = 2.0f;
+    for (int frame = 0; frame < 10; frame++) {
+        pad = padWith(0, 1.0f, 0.0f);
+        portPadAssistStep(&st, &in, &pad);
+    }
+    assert(near(pad.pointerX, 2.0f * x));
 }
 
 // A bubble is blown the way the stick points: the pointer sits behind it,

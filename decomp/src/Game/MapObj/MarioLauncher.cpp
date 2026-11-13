@@ -228,7 +228,7 @@ void MarioLauncher::exeAim() {
     }
 
 #ifdef TARGET_PC
-    MR::offerPadAssistCursor();
+    MR::offerPadAssistCursor(1.0f);
 #endif
     mLayout->appearAt(MR::getStarPointerScreenPositionOrEdge(WPAD_CHAN0));
 

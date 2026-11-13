@@ -105,7 +105,7 @@ Galaxy Android includes hardware layout presets accessible through the Settings 
 | **East Button** (B / A / ○) | **Shoot Star Bits / Cancel** | **Shoot Star Bits / Cancel** | **Shoot Star Bits / Cancel** |
 | **North Button** (Y / X / △) | **Star Spin Attack** | **Pointer Recenter** | **Pointer Recenter** |
 | **Left Bumper (L1 / LB)** | **Camera Snap Behind** (WPAD C) | **Camera Snap Behind** (WPAD C) | **Star Spin Attack** |
-| **Right Bumper (R1 / RB)** | **Recenter Star Pointer** | **Star Spin Attack** | **Camera Snap Behind** (WPAD C) |
+| **Right Bumper (R1 / RB)** | **Grab** (see below) | **Grab** | **Grab** |
 | **Left Trigger (L2 / LT)** | **Crouch / Ground Pound** (WPAD Z) | **Crouch / Ground Pound** (WPAD Z) | **Crouch / Ground Pound** (WPAD Z) |
 | **Right Trigger (R2 / RT)** | **Shoot Star Bits** (WPAD B) | **Shoot Star Bits** (WPAD B) | **Shoot Star Bits** (WPAD B) |
 | **L3 (Left Stick Click)** | **Crouch / Ground Pound** | **Crouch / Ground Pound** | **Crouch / Ground Pound** |
@@ -114,6 +114,26 @@ Galaxy Android includes hardware layout presets accessible through the Settings 
 | **D-Pad Up** | **First-Person View** | **First-Person View** | **First-Person View** |
 | **D-Pad Down** | **Recenter Camera** | **Recenter Camera** | **Recenter Camera** |
 | **Start / + / Menu** | **Pause Menu** (WPAD +) | **Pause Menu** (WPAD +) | **Pause Menu** (WPAD +) |
+
+### Playing Without Pointing or Tilting
+
+Once a gamepad is in use, nothing in the game needs the Star Pointer, the touchscreen or the device's motion sensors. Touch still works wherever it did, and a finger on the screen always takes precedence over the stick.
+
+| Mechanic | With a gamepad |
+|---|---|
+| **Pull Stars** (and the pull star in each Observatory dome) | Hold **Grab** (R1): Mario is pulled to the nearest one. Push the **left stick** towards another before pressing to choose it. Release to let go; press again to move on to the next. |
+| **Sling Pods** | Once Mario is stuck to the pod, hold **Grab**, pull the pod back with the **left stick**, and release to launch the other way. |
+| **Cannons** | The **left stick** moves the aiming reticle (it stays where you leave it). **Jump** fires, **Shoot / Cancel** climbs out. |
+| **Bubbles** | Hold **Jump** and push the **left stick** the way the bubble should go. A harder push blows harder. |
+| **Star Ball** | The **left stick** rolls the ball. **Jump** hops. |
+| **Manta Ray** | **Left stick** left / right steers, **Jump** accelerates, **Spin** hops. |
+| **Collecting Star Bits** | Star Bits near Mario fly to him by themselves. |
+| **Shooting Star Bits** | **Shoot** fires where Mario is facing; hold to keep firing. Tap the screen to hit an exact spot. |
+| **Menus** (file select, star select, pause menu, galaxy selector, yes / no) | The **left stick** moves the hand cursor, **Jump** confirms. |
+
+While the gamepad is in use the device's tilt sensors are ignored, so holding the device at an angle never steers the Star Ball or the ray.
+
+Not covered from the gamepad: spinning Mario or a bubble by drawing circles with the pointer, and stunning enemies by pointing at them. Both are optional, and both still work by touch.
 
 ### Deadzone & Trigger Calibration
 

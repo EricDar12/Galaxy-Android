@@ -2,6 +2,7 @@
 #include "Game/Screen/StarPointerDirector.hpp"
 #include "Game/Screen/StarPointerLayout.hpp"
 #include "Game/System/NerveExecutor.hpp"
+#include "Game/Util/PadAssistUtil.hpp"
 #include "Game/Util/StarPointerUtil.hpp"
 
 namespace {
@@ -39,6 +40,26 @@ StarPointerOnOffController::StarPointerOnOffController() : NerveExecutor("\x83\x
 
 void StarPointerOnOffController::update() {
     updateMode();
+#ifdef TARGET_PC
+    // Where the pointer is a hand that picks things on screen (menus, the
+    // galaxy selector, yes/no choices), a gamepad's stick moves it: Mario
+    // does not walk in any of these.
+    switch (mMode) {
+    case StarPointerMode_SaveLoad:
+    case StarPointerMode_FileSelect:
+    case StarPointerMode_ScenarioSelectScene:
+    case StarPointerMode_PauseMenu:
+    case StarPointerMode_ChooseYesNo:
+    case StarPointerMode_PictureBook:
+    case StarPointerMode_DemoWithHandPointerFinger:
+    case StarPointerMode_SphereSelectorOnReaction:
+    case StarPointerMode_SphereSelectorFinger:
+        MR::offerPadAssistCursor(1.6f);
+        break;
+    default:
+        break;
+    }
+#endif
     for (s32 idx = 0; idx < StarPointerMode_Count; idx++) {
         mRequested[idx] = false;
     }

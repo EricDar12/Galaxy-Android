@@ -86,9 +86,10 @@ void port_pad_assist_offer_bubble(float x, float y, float ux, float uy, float ne
     sBubbleAge = 0;
 }
 
-void port_pad_assist_offer_cursor(void) {
+void port_pad_assist_offer_cursor(float speed) {
     if (!sEnabled.load()) return;
     sFrame.cursor = 1;
+    sFrame.cursorSpeed = speed;
     sCursorAge = 0;
 }
 

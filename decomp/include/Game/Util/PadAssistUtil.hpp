@@ -28,8 +28,9 @@ namespace MR {
     /// @brief The stick blows the bubble at `rPos`: the pointer goes from `farDist` to `nearDist` behind it.
     void offerPadAssistBubble(const TVec3f& rPos, f32 nearDist, f32 farDist);
 
-    /// @brief The stick moves the pointer about the screen (aiming a cannon).
-    void offerPadAssistCursor();
+    /// @brief The stick moves the pointer about the screen (aiming a cannon, choosing in a menu).
+    /// @param speed How fast, 1 being the cannon's pace.
+    void offerPadAssistCursor(f32 speed);
 
     /// @brief Star bits can be shot: B sends them where Mario faces.
     void offerPadAssistShot();

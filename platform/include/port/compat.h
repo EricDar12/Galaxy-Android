@@ -182,7 +182,7 @@ int port_pad_assist_enabled(void);
 void port_pad_assist_offer_grab(const void* id, float x, float y, float dirX, float dirY, float dist, uint32_t flags);
 void port_pad_assist_offer_sling(float x, float y, float ux, float uy, float reach);
 void port_pad_assist_offer_bubble(float x, float y, float ux, float uy, float nearDist, float farDist);
-void port_pad_assist_offer_cursor(void);
+void port_pad_assist_offer_cursor(float speed);
 void port_pad_assist_offer_shot(float x, float y);
 float port_pad_assist_collect_radius(void);
 // Display aspect ratio query for native Hor+ ultrawide rendering

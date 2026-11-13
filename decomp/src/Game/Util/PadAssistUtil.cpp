@@ -96,8 +96,8 @@ namespace MR {
         port_pad_assist_offer_bubble(screenPos.x, screenPos.y, ux, uy, nearDist, farDist);
     }
 
-    void offerPadAssistCursor() {
-        port_pad_assist_offer_cursor();
+    void offerPadAssistCursor(f32 speed) {
+        port_pad_assist_offer_cursor(speed);
     }
 
     void offerPadAssistShot() {
