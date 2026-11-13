@@ -192,6 +192,13 @@ add_executable(pad_assist_test
 target_include_directories(pad_assist_test PRIVATE ${CMAKE_SOURCE_DIR}/platform/include)
 add_test(NAME pad_assist COMMAND pad_assist_test)
 
+add_executable(pad_assist_aim_test
+  test_pad_assist_aim.cpp
+  ${CMAKE_SOURCE_DIR}/platform/src/port/controller_mapping.cpp
+)
+target_include_directories(pad_assist_aim_test PRIVATE ${CMAKE_SOURCE_DIR}/platform/include)
+add_test(NAME pad_assist_aim COMMAND pad_assist_aim_test)
+
 add_executable(viewport_bounds_test
   test_viewport_bounds.cpp
   ${CMAKE_SOURCE_DIR}/platform/mobile/display/ViewportManager.cpp
